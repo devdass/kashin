@@ -1,0 +1,46 @@
+[
+  {
+    "pattern": "2degrees|spark nz|vodafone nz|skinny mobile|one nz|slingshot|telecom nz",
+    "category": "bills"
+  },
+  {
+    "pattern": "watercare|water and care|stormwater|wastewater|auckland council|council rates|rates",
+    "category": "bills"
+  },
+  {
+    "pattern": "invictus|les mills|cityfitness|snap fitness|anytime fitness|f45|bodybuilding|gym",
+    "category": "health"
+  },
+  {
+    "pattern": "aurora|countdown|new world|pak'n?save|four square|freshchoice|supervalue|woolworths|nosh food|huckleberry",
+    "category": "groceries"
+  },
+  {
+    "pattern": "mcdonald|burger king|kfc|wendy|dominos|hell pizza|pizza hut|subway|nandos|taco bell|st pierre|hells pizza|ferry cafe|lola breakfast|the dark horse",
+    "category": "eating-out"
+  },
+  {
+    "pattern": "z energy|bp nz|caltex|gull nz|allied petroleum|mobil|nz toll|at hop|aiport parking",
+    "category": "transport"
+  },
+  {
+    "pattern": "air new zealand|jetstar|qantas|emirates|wizz air|airasia",
+    "category": "travel"
+  },
+  {
+    "pattern": "accommodation|booking.com|airbnb|expedia|hotels.com",
+    "category": "travel"
+  },
+  {
+    "pattern": "netflix|spotify|apple.com|apple music|youtube premium|disney+|amazon prime|adobe|microsoft 365|canva|chatgpt|openai|notion|figma",
+    "category": "subscriptions-software"
+  },
+  {
+    "pattern": "anthropic|claude",
+    "category": "subscriptions-software"
+  },
+  {
+    "pattern": "chemist warehouse|green cross|life pharmacy|unichem|dental|optician|physio|pharmacy",
+    "category": "health"
+  }
+]
