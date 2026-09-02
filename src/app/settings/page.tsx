@@ -196,6 +196,7 @@ export default async function SettingsPage({
             <select className="field" defaultValue={llm.provider} name="provider">
               <option value="openai">OpenAI</option>
               <option value="anthropic">Anthropic</option>
+              <option value="surplus">Surplus Intelligence</option>
               <option value="custom">OpenAI-compatible (custom)</option>
             </select>
           </label>

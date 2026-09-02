@@ -3,7 +3,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { decryptSecret, encryptSecret } from "@/lib/vault";
 
-export type LlmProvider = "openai" | "anthropic" | "custom";
+export type LlmProvider = "openai" | "anthropic" | "custom" | "surplus";
 
 export type LlmSettings = {
   enabled: boolean;
@@ -33,6 +33,7 @@ const DEFAULT_MODELS: Record<LlmProvider, string> = {
   openai: "gpt-4o-mini",
   anthropic: "claude-3-5-haiku-latest",
   custom: "",
+  surplus: "deepseek-v4-flash-0731-fast",
 };
 
 export function getLlmSettings(): LlmSettings {
@@ -54,7 +55,7 @@ export function getLlmSettings(): LlmSettings {
   }
   return {
     enabled: row.enabled === 1,
-    provider: (["openai", "anthropic", "custom"].includes(row.provider) ? row.provider : "openai") as LlmProvider,
+    provider: (["openai", "anthropic", "custom", "surplus"].includes(row.provider) ? row.provider : "openai") as LlmProvider,
     model: row.model,
     baseUrl: row.base_url,
     apiKey,
@@ -163,11 +164,13 @@ async function callProvider(
       return text;
     }
 
-    // openai + custom both speak the OpenAI chat completions format.
+    // openai, custom, and surplus all speak the OpenAI chat completions format.
     const base =
       settings.provider === "custom"
         ? settings.baseUrl || "http://localhost:11434/v1"
-        : settings.baseUrl || "https://api.openai.com/v1";
+        : settings.provider === "surplus"
+          ? settings.baseUrl || "https://api.surplusintelligence.ai/v1"
+          : settings.baseUrl || "https://api.openai.com/v1";
     const response = await fetch(`${base.replace(/\/$/, "")}/chat/completions`, {
       method: "POST",
       headers: {

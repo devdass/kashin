@@ -6,7 +6,7 @@ import { getAuthenticatedUserId } from "@/lib/auth";
 import { verifyAkahuTokens } from "@/lib/akahu";
 import { getAkahuTokens, saveAkahuTokens } from "@/lib/credentials";
 import { db } from "@/lib/db";
-import { classifyBacklog, classifyUnreviewedWithLlm } from "@/lib/finance";
+import { classifyBacklog, classifyUnreviewedWithLlm, slugify } from "@/lib/finance";
 import { syncFinanceData } from "@/lib/finance-sync";
 import {
   getLlmSettings,
@@ -290,6 +290,86 @@ export async function archiveCategory(formData: FormData) {
   revalidatePath("/", "layout");
 }
 
+export async function createCategoriesFromWizard(formData: FormData) {
+  await requireUser();
+  const now = new Date().toISOString();
+  const existing = new Set<string>((db.prepare("SELECT id FROM categories").all() as Array<{ id: string }>).map((r) => r.id));
+  let maxOrder = (db.prepare("SELECT COALESCE(MAX(sort_order), 0) m FROM categories").get() as { m: number }).m;
+  const seen = new Set<string>();
+  const insert = db.prepare(`
+    INSERT INTO categories (id, name, section, color, sort_order, created_at, updated_at)
+    VALUES (?, ?, 'PERSONAL', ?, ?, ?, ?)
+  `);
+
+  const addOne = (nameRaw: string, colorRaw: string) => {
+    const name = nameRaw.trim();
+    if (!name) return;
+    const normalizedName = name.toLowerCase();
+    if (seen.has(normalizedName)) return;
+    seen.add(normalizedName);
+    let id = slugify(name);
+    if (!id) id = `cat-${Date.now()}-${maxOrder}`;
+    while (existing.has(id)) {
+      id = `${id}-${maxOrder}`;
+      maxOrder += 1;
+    }
+    existing.add(id);
+    maxOrder += 1;
+    insert.run(id, name, colorRaw || "#9a9a93", maxOrder, now, now);
+  };
+
+  // Read checkbox selections: name_<slug> and color_<slug>
+  const selected = formData.getAll("selected").map(String);
+  for (const slug of selected) {
+    const name = String(formData.get(`name_${slug}`) ?? "").trim();
+    const color = String(formData.get(`color_${slug}`) ?? "").trim();
+    if (name) addOne(name, color);
+  }
+
+  // Ensure an "Other" catch-all exists so uncategorised transactions have a home.
+  const otherExists = [...existing].some((id) => id === "other") ||
+    Boolean(db.prepare("SELECT 1 FROM categories WHERE name = 'Other'").get());
+  if (!otherExists) {
+    let id = "other";
+    while (existing.has(id)) id = `other-${maxOrder}`;
+    existing.add(id);
+    maxOrder += 1;
+    insert.run(id, "Other", "#9a9a93", maxOrder, now, now);
+  }
+
+  revalidatePath("/settings");
+  revalidatePath("/", "layout");
+}
+
+export async function completeOnboarding() {
+  await requireUser();
+  db.prepare(`
+    INSERT INTO finance_settings (key, value, updated_at) VALUES ('onboarding_complete', '1', ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+  `).run(new Date().toISOString());
+  revalidatePath("/", "layout");
+  revalidatePath("/welcome");
+  redirect("/");
+}
+
+export async function skipOnboarding() {
+  await requireUser();
+  // Ensure an "Other" category exists so uncategorised transactions have a home.
+  const otherExists = Boolean(db.prepare("SELECT 1 FROM categories WHERE name = 'Other'").get());
+  if (!otherExists) {
+    const now = new Date().toISOString();
+    const maxOrder = (db.prepare("SELECT COALESCE(MAX(sort_order), 0) m FROM categories").get() as { m: number }).m;
+    db.prepare("INSERT INTO categories (id, name, section, color, sort_order, created_at, updated_at) VALUES ('other', 'Other', 'PERSONAL', '#9a9a93', ?, ?, ?)").run(maxOrder + 1, now, now);
+  }
+  db.prepare(`
+    INSERT INTO finance_settings (key, value, updated_at) VALUES ('onboarding_complete', '1', ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+  `).run(new Date().toISOString());
+  revalidatePath("/", "layout");
+  revalidatePath("/welcome");
+  redirect("/");
+}
+
 export async function addGoal(formData: FormData) {
   await requireUser();
   const name = String(formData.get("name") ?? "").trim();
@@ -369,7 +449,7 @@ export async function saveLlmSettings(formData: FormData) {
   await requireUser();
   if (getVaultConfigurationError()) redirect("/settings?notice=vault-invalid");
   const enabled = formData.get("enabled") === "1";
-  const provider = (["openai", "anthropic", "custom"].includes(String(formData.get("provider")))
+  const provider = (["openai", "anthropic", "custom", "surplus"].includes(String(formData.get("provider")))
     ? String(formData.get("provider"))
     : "openai") as LlmProvider;
   const model = String(formData.get("model") ?? "").trim();
@@ -461,4 +541,65 @@ export async function resetLocalData() {
   revalidatePath("/", "layout");
   revalidatePath("/settings");
   redirect("/settings?notice=reset-done");
+}
+
+export type WizardActionResult = { ok: boolean; message?: string };
+
+export async function wizardSaveTokens(formData: FormData): Promise<WizardActionResult> {
+  if (!(await getAuthenticatedUserId())) return { ok: false, message: "Not signed in." };
+  if (getVaultConfigurationError()) return { ok: false, message: "Encryption key not configured." };
+  const userToken = String(formData.get("userToken") ?? "").trim();
+  const appToken = String(formData.get("appToken") ?? "").trim();
+  if (!userToken || !appToken) return { ok: false, message: "Both Akahu tokens are required." };
+  const result = await verifyAkahuTokens({ userToken, appToken });
+  if (result.status !== "connected") {
+    return { ok: false, message: result.status === "error" ? result.message : "Akahu did not accept those tokens." };
+  }
+  saveAkahuTokens({ userToken, appToken });
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+export async function wizardSync(): Promise<WizardActionResult> {
+  if (!(await getAuthenticatedUserId())) return { ok: false, message: "Not signed in." };
+  const tokens = getAkahuTokens();
+  if (!tokens) return { ok: false, message: "Akahu tokens are not configured yet." };
+  const result = await syncFinanceData(tokens);
+  revalidatePath("/", "layout");
+  revalidatePath("/activity");
+  if (result.status !== "success") return { ok: false, message: result.message };
+  return { ok: true };
+}
+
+export async function finishOnboarding(): Promise<WizardActionResult> {
+  if (!(await getAuthenticatedUserId())) return { ok: false, message: "Not signed in." };
+  const otherExists = Boolean(db.prepare("SELECT 1 FROM categories WHERE name = 'Other'").get());
+  if (!otherExists) {
+    const now = new Date().toISOString();
+    const maxOrder = (db.prepare("SELECT COALESCE(MAX(sort_order), 0) m FROM categories").get() as { m: number }).m;
+    db.prepare("INSERT INTO categories (id, name, section, color, sort_order, created_at, updated_at) VALUES ('other', 'Other', 'PERSONAL', '#9a9a93', ?, ?, ?)").run(maxOrder + 1, now, now);
+  }
+  db.prepare(`
+    INSERT INTO finance_settings (key, value, updated_at) VALUES ('onboarding_complete', '1', ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+  `).run(new Date().toISOString());
+  revalidatePath("/", "layout");
+  revalidatePath("/welcome");
+  return { ok: true };
+}
+
+export async function wizardSaveLlmSettings(formData: FormData): Promise<WizardActionResult> {
+  if (!(await getAuthenticatedUserId())) return { ok: false, message: "Not signed in." };
+  if (getVaultConfigurationError()) return { ok: false, message: "Encryption key not configured." };
+  const enabled = formData.get("enabled") === "1";
+  const provider = (["openai", "anthropic", "custom", "surplus"].includes(String(formData.get("provider")))
+    ? String(formData.get("provider"))
+    : "openai") as LlmProvider;
+  const model = String(formData.get("model") ?? "").trim();
+  const baseUrl = String(formData.get("baseUrl") ?? "").trim() || null;
+  const rawKey = String(formData.get("apiKey") ?? "").trim();
+  persistLlmSettings({ enabled, provider, model, baseUrl, apiKey: rawKey === "" ? null : rawKey });
+  revalidatePath("/settings");
+  revalidatePath("/", "layout");
+  return { ok: true };
 }

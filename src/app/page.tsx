@@ -1,10 +1,12 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/auth";
 import { Brochure } from "@/components/brochure";
 import { FinanceChrome } from "@/components/finance-shell";
 import { getAuthenticatedUserId, hasAccount } from "@/lib/auth";
 import { getAkahuTokens } from "@/lib/credentials";
 import { getAccounts, getDashboardData } from "@/lib/finance-data";
+import { isOnboardingComplete } from "@/lib/onboarding";
 import { getVaultConfigurationError } from "@/lib/vault";
 import { saveCredentials } from "./actions";
 import { syncFinance } from "./finance-actions";
@@ -84,6 +86,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
   const activePeriod = period === "month" ? "month" : "week";
   if (!hasAccount()) return <Brochure />;
   if (!(await getAuthenticatedUserId())) return <LoginForm notice={notice} />;
+  if (!isOnboardingComplete()) redirect("/welcome");
 
   const vaultError = getVaultConfigurationError();
   let tokens = null;
