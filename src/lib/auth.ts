@@ -4,7 +4,7 @@ import { hash, verify } from "@node-rs/argon2";
 import { createHash, randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { db } from "@/lib/db";
+import { db, dbUnavailable } from "@/lib/db";
 
 export const SESSION_COOKIE = "akahu_session";
 const SESSION_DURATION_SECONDS = 60 * 60 * 24 * 7;
@@ -22,6 +22,7 @@ function digestSessionToken(token: string) {
 }
 
 export function hasAccount() {
+  if (dbUnavailable) return false;
   return Boolean(db.prepare("SELECT id FROM users WHERE id = 1").get());
 }
 
@@ -88,6 +89,7 @@ export function createSession() {
 }
 
 export async function getAuthenticatedUserId() {
+  if (dbUnavailable) return null;
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) return null;
 

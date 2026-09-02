@@ -9,15 +9,41 @@ const dataDirectory = process.env.AKAHU_DATA_DIRECTORY
   : path.join(process.cwd(), "data");
 const databasePath = path.join(dataDirectory, "app.db");
 
-mkdirSync(dataDirectory, { recursive: true, mode: 0o700 });
+// On read-only filesystems (e.g. Vercel serverless, some container runtimes)
+// SQLite cannot be created. The app then runs in "brochure mode": the marketing
+// landing renders and data routes redirect to it, instead of crashing with 500.
+export let dbUnavailable = false;
 
 const globalForDatabase = globalThis as unknown as {
   akahuDatabase?: Database.Database;
 };
 
-export const db =
-  globalForDatabase.akahuDatabase ?? new Database(databasePath, { timeout: 5000 });
+export const db: Database.Database = (() => {
+  try {
+    if (globalForDatabase.akahuDatabase) return globalForDatabase.akahuDatabase;
+    mkdirSync(dataDirectory, { recursive: true, mode: 0o700 });
+    const instance = new Database(databasePath, { timeout: 5000 });
+    globalForDatabase.akahuDatabase = instance;
+    return instance;
+  } catch (error) {
+    console.error(
+      "[kashin] SQLite unavailable (read-only filesystem?). Running in brochure mode.",
+      error instanceof Error ? error.message : error,
+    );
+    dbUnavailable = true;
+    // Throw a clear error if any caller actually tries to use the database,
+    // so we surface the limitation loudly instead of silently misbehaving.
+    return new Proxy({} as unknown as Database.Database, {
+      get() {
+        throw new Error(
+          "Kashin database is unavailable in this environment (read-only filesystem). Run the app locally with a writable data directory.",
+        );
+      },
+    });
+  }
+})();
 
+if (!dbUnavailable) {
 db.pragma("journal_mode = WAL");
 db.pragma("foreign_keys = ON");
 db.exec(`
@@ -50,6 +76,7 @@ db.exec(`
     applied_at TEXT NOT NULL
   );
 `);
+}
 
 const migrations = [
   {
@@ -264,9 +291,10 @@ const applyMigration = db.transaction((version: number, sql: string) => {
 });
 
 for (const migration of migrations) {
+  if (dbUnavailable) break;
   applyMigration.immediate(migration.version, migration.sql);
 }
 
-if (process.env.NODE_ENV !== "production") {
+if (process.env.NODE_ENV !== "production" && !dbUnavailable) {
   globalForDatabase.akahuDatabase = db;
 }

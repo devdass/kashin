@@ -1,6 +1,6 @@
 import "server-only";
 
-import { db } from "@/lib/db";
+import { db, dbUnavailable } from "@/lib/db";
 import { seedFinanceData } from "@/lib/finance";
 
 export type CategorySpend = {
@@ -59,6 +59,7 @@ export type CachedTransaction = {
 type SettingRow = { key: string; value: string };
 
 function getReportingTimeZone(): string {
+  if (dbUnavailable) return "Pacific/Auckland";
   const row = db
     .prepare("SELECT value FROM finance_settings WHERE key = ?")
     .get("reporting_timezone") as { value?: string } | undefined;
