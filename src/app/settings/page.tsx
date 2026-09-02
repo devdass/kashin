@@ -19,6 +19,7 @@ import {
   syncFinance,
   updateGoal,
 } from "@/app/finance-actions";
+import { Collapsible } from "@/components/collapsible";
 import { FinanceShell } from "@/components/finance-shell";
 import { requireAuthenticatedUser } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -149,32 +150,38 @@ export default async function SettingsPage({
         <p className="mt-2 text-sm leading-6 text-[#4a4a4a]">
           Choose which accounts feed the main balanced budget on the home screen. Untick any you want to exclude (for example a joint card). Leave all unticked for no budget.
         </p>
-        <form action={saveBudgetAccounts} className="mt-4">
-          <div className="grid gap-2 sm:grid-cols-2">
-            {accounts.map((account) => {
-              const checked = selectedIds.includes(account.id);
-              return (
-                <label className="flex cursor-pointer items-center gap-3 border border-[#c8bea8] bg-[#faf8f3] px-3 py-2.5" key={account.id}>
-                  <input className="h-4 w-4 accent-[#1c2b3a]" defaultChecked={checked} name="account_id" type="checkbox" value={account.id} />
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm text-[#1a1a1a]">{account.displayName}</span>
-                    <span className="block font-mono text-[9px] uppercase tracking-[0.05em] text-[#9a9a9a]">{account.institution} · {account.type}</span>
-                  </span>
-                </label>
-              );
-            })}
-          </div>
-          <div className="mt-4 flex justify-end">
-            <button className="min-h-10 bg-[#1c2b3a] px-6 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-[#b8922a] hover:text-[#1c2b3a]" type="submit">
-              Save budget accounts
-            </button>
-          </div>
-        </form>
+        {accounts.length > 0 ? (
+          <form action={saveBudgetAccounts} className="mt-4">
+            <div className="grid gap-2 sm:grid-cols-2">
+              {accounts.map((account) => {
+                const checked = selectedIds.includes(account.id);
+                return (
+                  <label className="flex cursor-pointer items-center gap-3 border border-[#c8bea8] bg-[#faf8f3] px-3 py-2.5" key={account.id}>
+                    <input className="h-4 w-4 accent-[#1c2b3a]" defaultChecked={checked} name="account_id" type="checkbox" value={account.id} />
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm text-[#1a1a1a]">{account.displayName}</span>
+                      <span className="block font-mono text-[9px] uppercase tracking-[0.05em] text-[#9a9a9a]">{account.institution} · {account.type}</span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button className="min-h-10 bg-[#1c2b3a] px-6 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-[#b8922a] hover:text-[#1c2b3a]" type="submit">
+                Save budget accounts
+              </button>
+            </div>
+          </form>
+        ) : (
+          <p className="mt-4 border-l-4 border-[#b8922a] bg-[#f0ebe0] px-4 py-3 text-sm text-[#4a4a4a]">
+            No accounts synced yet. Use <strong>Sync local data</strong> above to pull in your Akahu accounts, then choose which ones feed your budget here.
+          </p>
+        )}
       </div>
 
       {/* ── AI categorisation ── */}
-      <SectionTitle eyebrow="Optional" title="AI categorisation" />
-      <div className="mt-3 border border-[#c8bea8] bg-[#faf7f0] p-5">
+      <Collapsible eyebrow="Optional" title="AI categorisation" badge="off by default">
+        <div className="border border-[#c8bea8] bg-[#faf7f0] p-5">
         <p className="text-sm leading-6 text-[#4a4a4a]">
           Use a bring-your-own LLM to help label transactions the local rules can&apos;t resolve. Off by default. When enabled, descriptions of unmatched
           transactions are sent to the provider you configure — never account numbers or tokens.
@@ -233,10 +240,11 @@ export default async function SettingsPage({
           </form>
         </div>
       </div>
+      </Collapsible>
 
       {/* ── Categories ── */}
-      <SectionTitle eyebrow="Ledger" title="Spending categories" />
-      <div className="mt-3 border border-[#c8bea8]">
+      <Collapsible eyebrow="Ledger" title="Spending categories" badge={`${categories.length}`}>
+        <div className="border border-[#c8bea8]">
         {categories.map((category) => (
           <form action={renameCategory} className="flex items-center gap-3 border-b border-[#c8bea8]/50 bg-[#faf7f0] px-4 py-2.5 last:border-b-0" key={category.id}>
             <input name="id" type="hidden" value={category.id} />
@@ -262,10 +270,11 @@ export default async function SettingsPage({
           Add
         </button>
       </form>
+      </Collapsible>
 
       {/* ── Goals ── */}
-      <SectionTitle eyebrow="Savings" title="Goals" />
-      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+      <Collapsible eyebrow="Savings" title="Goals" badge={`${goals.length}`}>
+        <div className="grid gap-3 sm:grid-cols-2">
         {goals.map((goal) => {
           const progress = goal.target ? Math.min((goal.current / goal.target) * 100, 100) : 0;
           return (
@@ -313,13 +322,14 @@ export default async function SettingsPage({
           </button>
         </form>
       </div>
+      </Collapsible>
 
       {/* ── Travel windows ── */}
-      <SectionTitle eyebrow="Context" title="Travel windows" />
-      <p className="mt-1 text-sm text-[#4a4a4a]">
-        Transactions in these dates whose Akahu category is &quot;Travel&quot; are categorised as Travel.
-      </p>
-      <div className="mt-3 border border-[#c8bea8] bg-[#faf7f0]">
+      <Collapsible eyebrow="Context" title="Travel windows" badge={`${travelWindows.length}`}>
+        <p className="text-sm text-[#4a4a4a]">
+          Transactions in these dates whose Akahu category is &quot;Travel&quot; are categorised as Travel.
+        </p>
+        <div className="mt-3 border border-[#c8bea8] bg-[#faf7f0]">
         {travelWindows.map((window) => (
           <form action={deleteTravelWindow} className="flex items-center justify-between gap-3 border-b border-[#c8bea8]/50 px-4 py-2.5 last:border-b-0" key={window.id}>
             <span className="text-sm text-[#1a1a1a]">{window.name}</span>
@@ -339,8 +349,9 @@ export default async function SettingsPage({
         <input className="field min-h-10 text-sm" id="tw-end" name="endsOn" type="date" />
         <button className="min-h-10 border border-[#1c2b3a] px-5 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-[#1a3a5c] transition hover:bg-[#1c2b3a] hover:text-white" type="submit">
           Add
-        </button>
-      </form>
+</button>
+        </form>
+      </Collapsible>
 
       {/* ── Preferences ── */}
       <SectionTitle eyebrow="Preferences" title="Budget & reporting figures" />
@@ -370,17 +381,18 @@ export default async function SettingsPage({
       </form>
 
       {/* ── Data ── */}
-      <SectionTitle eyebrow="Danger zone" title="Local data" />
-      <div className="mt-3 border border-[#c8bea8] bg-[#faf7f0] p-5">
-        <p className="text-sm leading-6 text-[#4a4a4a]">
-          Reset all local data — transactions, budgets, goals, categories, and settings — and re-seed the default categories. Your Akahu tokens and login stay.
-        </p>
-        <form action={resetLocalData} className="mt-4">
-          <button className="min-h-10 border border-[#b43b31] px-6 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-[#b43b31] transition hover:bg-[#b43b31] hover:text-white" type="submit">
-            Reset local data
-          </button>
-        </form>
-      </div>
+      <Collapsible eyebrow="Danger zone" title="Local data" badge="reset">
+        <div className="border border-[#c8bea8] bg-[#faf7f0] p-5">
+          <p className="text-sm leading-6 text-[#4a4a4a]">
+            Reset all local data — transactions, budgets, goals, categories, and settings — and re-seed the default categories. Your Akahu tokens and login stay.
+          </p>
+          <form action={resetLocalData} className="mt-4">
+            <button className="min-h-10 border border-[#b43b31] px-6 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-[#b43b31] transition hover:bg-[#b43b31] hover:text-white" type="submit">
+              Reset local data
+            </button>
+          </form>
+        </div>
+      </Collapsible>
 
       <form action={logout} className="mt-6 md:hidden">
         <button className="min-h-11 w-full border border-[#1c2b3a] font-mono text-[10px] uppercase tracking-[0.08em] text-[#1c2b3a]" type="submit">Sign out</button>

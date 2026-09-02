@@ -85,20 +85,27 @@ export function Brochure() {
             </div>
           </div>
           <div className="border border-[#c8bea8] bg-[#faf7f0] p-6">
-            <p className="meta-label">This week</p>
+            <div className="flex items-baseline justify-between gap-2">
+              <p className="meta-label">This week</p>
+              <span className="font-mono text-[9px] uppercase tracking-[0.05em] text-[#9a9a9a]">week 36</span>
+            </div>
             <p className="mt-3 font-serif text-4xl font-bold text-[#1c2b3a]">$1,240</p>
             <div className="mt-4 h-1.5 bg-[#f0ebe0]">
-              <div className="h-full w-[74%] bg-[#1a3a5c]" />
+              <div className="h-full w-[83%] bg-[#1a3a5c]" />
             </div>
-            <div className="mt-5 grid grid-cols-2 gap-4">
-              <div><p className="meta-label">Groceries</p><p className="serif-amount mt-1 text-lg">$286</p></div>
-              <div><p className="meta-label">Eating out</p><p className="serif-amount mt-1 text-lg">$142</p></div>
-              <div><p className="meta-label">Transport</p><p className="serif-amount mt-1 text-lg">$96</p></div>
-              <div><p className="meta-label">Bills</p><p className="serif-amount mt-1 text-lg">$310</p></div>
+            <p className="mt-1.5 font-mono text-[9px] uppercase tracking-[0.05em] text-[#7a7a7a]">
+              $1,240 of $1,500 budgeted
+            </p>
+            <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3">
+              <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: "#78c091" }} /><div><p className="meta-label">Groceries</p><p className="serif-amount mt-0.5 text-lg">$286</p></div></div>
+              <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: "#f28c52" }} /><div><p className="meta-label">Eating out</p><p className="serif-amount mt-0.5 text-lg">$142</p></div></div>
+              <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: "#e7aa18" }} /><div><p className="meta-label">Transport</p><p className="serif-amount mt-0.5 text-lg">$96</p></div></div>
+              <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: "#e9637f" }} /><div><p className="meta-label">Bills</p><p className="serif-amount mt-0.5 text-lg">$310</p></div></div>
             </div>
             <div className="double-rule mt-6" />
-            <p className="mt-4 text-sm leading-6 text-[#4a4a4a]">
-              Illustrative preview. Your dashboard reflects your own accounts and data.
+            <p className="mt-4 font-mono text-[9px] uppercase leading-5 tracking-[0.06em] text-[#9a9a9a]">
+              Illustrative preview
+              <br />Your dashboard reflects your own accounts and data.
             </p>
           </div>
         </section>

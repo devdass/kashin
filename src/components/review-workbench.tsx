@@ -249,6 +249,8 @@ export function ReviewWorkbench({
 
   return (
     <div>
+      {transactions.length > 0 ? (
+      <>
       <section aria-label="Activity summary" className="grid grid-cols-2 border border-[#c8bea8] bg-[#faf7f0] md:grid-cols-4">
         <div className="border-b border-r border-[#c8bea8]/60 p-4 md:border-b-0">
           <p className="meta-label">Results</p>
@@ -445,6 +447,8 @@ export function ReviewWorkbench({
           </div>
         ) : null}
       </div>
+      </>
+      ) : null}
 
       {filtered.length === 0 ? (
         <div className="mt-5 border border-[#c8bea8] bg-[#faf7f0] p-8 text-center">
@@ -458,7 +462,13 @@ export function ReviewWorkbench({
           </p>
           {transactions.length > 0 ? (
             <button className="mt-4 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-[#1a3a5c] hover:text-[#b8922a]" onClick={resetFilters} type="button">Reset filters</button>
-          ) : null}
+          ) : onlyReview ? null : (
+            <div className="mt-4">
+              <Link className="inline-flex min-h-9 items-center bg-[#1c2b3a] px-5 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-[#b8922a] hover:text-[#1c2b3a]" href="/settings">
+                Sync an account
+              </Link>
+            </div>
+          )}
         </div>
       ) : (
         <section aria-label="Transactions" className="mt-5 border border-[#c8bea8]">

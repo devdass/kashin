@@ -16,6 +16,17 @@ export default async function BudgetPage() {
   return (
     <FinanceShell eyebrow="Current month" title="Balanced budget">
 
+      {/* ── First-run guidance ── */}
+      {data.totalBudget === 0 ? (
+        <div className="border-l-4 border-[#b8922a] bg-[#1c2b3a] p-5 text-white">
+          <p className="font-serif text-lg font-bold">Set your monthly targets to get started.</p>
+          <p className="mt-2 text-sm leading-6 text-white/70">
+            Enter a target for each category below, then hit <strong>Save targets</strong>.
+            Your spending this month will be measured against these amounts.
+          </p>
+        </div>
+      ) : null}
+
       {/* ── Summary panel ── */}
       <div className="grid border border-[#c8bea8] sm:grid-cols-3">
         <div className="bg-[#1c2b3a] p-6 text-white sm:col-span-2">
@@ -59,6 +70,7 @@ export default async function BudgetPage() {
               >
                 {/* Name row + inline spent / target input */}
                 <div className="flex items-center gap-4">
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: category.color }} />
                   <p className="flex-1 text-sm font-semibold text-[#1c2b3a]">
                     {category.name}
                   </p>
@@ -69,33 +81,41 @@ export default async function BudgetPage() {
                     <span className="font-mono text-[10px] text-[#c8bea8]">of</span>
                     <input
                       className="w-24 border border-[#c8bea8] bg-[#faf8f3] px-2.5 py-1.5 text-right font-mono text-xs text-[#1a1a1a] outline-none transition focus:border-[#b8922a]"
-                      defaultValue={limit}
+                      defaultValue={limit || ""}
                       min="0"
                       name={`limit_${category.id}`}
+                      placeholder="0"
                       step="1"
                       type="number"
                     />
                   </div>
                 </div>
 
-                {/* Progress bar + percentage */}
-                <div className="mt-3 flex items-center gap-3">
-                  <div className="h-1.5 flex-1 bg-[#f0ebe0]">
-                    <div
-                      className={`h-full transition-all ${over ? "bg-[#b43b31]" : "bg-[#1a3a5c]"}`}
-                      style={{ width: `${pct}%` }}
-                    />
+                {/* Progress bar + percentage (hidden until a target is set) */}
+                {limit > 0 ? (
+                  <div className="mt-3 flex items-center gap-3">
+                    <div className="h-1.5 flex-1 bg-[#f0ebe0]">
+                      <div
+                        className={`h-full transition-all ${over ? "bg-[#b43b31]" : "bg-[#1a3a5c]"}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <p className={`w-8 text-right font-mono text-[9px] uppercase tracking-[0.06em] ${over ? "text-[#b43b31]" : "text-[#9a9a9a]"}`}>
+                      {pct.toFixed(0)}%
+                    </p>
                   </div>
-                  <p className={`w-8 text-right font-mono text-[9px] uppercase tracking-[0.06em] ${over ? "text-[#b43b31]" : "text-[#9a9a9a]"}`}>
-                    {pct.toFixed(0)}%
+                ) : (
+                  <p className="mt-3 font-mono text-[9px] uppercase tracking-[0.05em] text-[#b8b0a0]">
+                    No target set
                   </p>
-                </div>
+                )}
               </div>
             );
           })}
         </div>
 
-        <div className="mt-4 flex justify-end">
+        <div className="mt-4 flex items-center justify-between border-t border-[#c8bea8] bg-[#faf7f0] px-5 py-3">
+          <p className="font-mono text-[9px] uppercase tracking-[0.05em] text-[#9a9a9a]">Targets are applied to this month&apos;s balanced budget.</p>
           <button
             className="min-h-10 bg-[#1c2b3a] px-8 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-[#b8922a] hover:text-[#1c2b3a]"
             type="submit"
