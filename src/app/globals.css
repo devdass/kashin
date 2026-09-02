@@ -1,0 +1,127 @@
+@import "tailwindcss";
+
+:root {
+  --asic-navy: #1c2b3a;
+  --asic-navy-2: #253545;
+  --asic-gold: #b8922a;
+  --asic-gold-bright: #c8a84b;
+  --asic-blue: #1a3a5c;
+  --paper: #f0ebe0;
+  --paper-card: #faf7f0;
+  --paper-cream: #faf8f3;
+  --paper-line: #c8bea8;
+  --paper-line-soft: rgb(200 190 168 / 0.55);
+  --ink: #1a1a1a;
+  --ink-muted: #4a4a4a;
+  --ink-dim: #7a7a7a;
+  --ink-ghost: #9a9a9a;
+  --up: #4caf50;
+  --down: #b43b31;
+  --gain: #1a5c2a;
+  --background: var(--paper);
+  --foreground: var(--ink);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-source-sans);
+  --font-mono: var(--font-plex-mono);
+  --font-serif: var(--font-libre-baskerville);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-source-sans), Arial, Helvetica, sans-serif;
+}
+
+.glow {
+  display: none;
+}
+
+.glow-left {
+  top: -17rem;
+  left: -14rem;
+  background: #c9f269;
+}
+
+.glow-right {
+  right: -18rem;
+  bottom: -20rem;
+  background: #69f2bc;
+}
+
+.field {
+  width: 100%;
+  border: 1px solid var(--paper-line);
+  border-radius: 0;
+  background: var(--paper-cream);
+  padding: 0.65rem 0.75rem;
+  color: var(--ink);
+  outline: none;
+  transition: border-color 150ms, box-shadow 150ms;
+}
+
+.field:focus {
+  border-color: var(--asic-gold);
+  box-shadow: 0 0 0 2px rgb(184 146 42 / 0.12);
+}
+
+.primary-button {
+  margin-top: 0.25rem;
+  border-radius: 0;
+  background: var(--asic-gold);
+  padding: 0.7rem 0.9rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--asic-navy);
+  cursor: pointer;
+  transition: background 150ms, transform 150ms;
+}
+
+.primary-button:hover {
+  background: var(--asic-gold-bright);
+}
+
+.primary-button:active {
+  transform: translateY(1px);
+}
+
+.meta-label {
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-dim);
+}
+
+.eyebrow {
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--asic-gold);
+}
+
+.double-rule {
+  height: 3px;
+  border-top: 1px solid var(--asic-navy);
+  border-bottom: 1px solid var(--asic-navy);
+}
+
+.paper-card {
+  border: 1px solid var(--paper-line);
+  background: var(--paper-card);
+}
+
+.navy-panel {
+  background: var(--asic-navy);
+  color: white;
+}
+
+.serif-amount {
+  font-family: var(--font-libre-baskerville), Georgia, serif;
+  color: var(--asic-blue);
+}
