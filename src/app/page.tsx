@@ -10,6 +10,8 @@ import { isOnboardingComplete } from "@/lib/onboarding";
 import { getVaultConfigurationError } from "@/lib/vault";
 import { saveCredentials } from "./actions";
 import { syncFinance } from "./finance-actions";
+import { SpendingProfileCard } from "@/components/spending-profile-card";
+import { getSpendingProfile } from "@/lib/insights";
 
 const notices: Record<string, string> = {
   "account-created": "Your local account is ready.",
@@ -103,6 +105,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
   // hitting Akahu's live API on every page load. Freshness is tracked via
   // the latest sync run; an explicit "Sync" action refreshes from Akahu.
   const accounts = getAccounts();
+  const spendingProfile = tokens ? getSpendingProfile() : null;
   const finance = tokens
     ? getDashboardData({ period: activePeriod, selectedCategoryId: category })
     : null;
@@ -274,7 +277,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
               {/* ── Right column ── */}
               <div className="mt-6 md:mt-0">
                 {/* Accounts */}
-                <section>
+               <section>
+                  {spendingProfile && <SpendingProfileCard profile={spendingProfile} />}
+                </section>
+                <section className="mt-6">
                   <div className="flex items-baseline justify-between gap-3">
                     <p className="eyebrow">Accounts</p>
                     <span className="font-mono text-[9px] text-[#9a9a9a]">{accounts.length} connected</span>

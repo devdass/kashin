@@ -13,8 +13,10 @@ import {
   saveLlmSettings as persistLlmSettings,
   testLlmConnection,
   type LlmProvider,
+  type LlmSettings,
 } from "@/lib/llm";
 import { getVaultConfigurationError } from "@/lib/vault";
+import { detectCategoryUsage, detectIncome } from "@/lib/insights";
 
 async function requireUser() {
   if (!(await getAuthenticatedUserId())) redirect("/");
@@ -605,4 +607,69 @@ export async function wizardSaveLlmSettings(formData: FormData): Promise<WizardA
   revalidatePath("/settings");
   revalidatePath("/", "layout");
   return { ok: true };
+}
+
+/** Test the LLM using the unsaved wizard form values (no redirect, returns a result). */
+export async function wizardTestLlm(formData: FormData): Promise<WizardActionResult> {
+  if (!(await getAuthenticatedUserId())) return { ok: false, message: "Not signed in." };
+  const enabled = formData.get("enabled") === "1";
+  const provider = (["openai", "anthropic", "custom", "surplus"].includes(String(formData.get("provider")))
+    ? String(formData.get("provider"))
+    : "openai") as LlmProvider;
+  const model = String(formData.get("model") ?? "").trim();
+  const baseUrl = String(formData.get("baseUrl") ?? "").trim() || null;
+  const apiKey = String(formData.get("apiKey") ?? "").trim() || null;
+  const override: Partial<LlmSettings> = { enabled, provider, model, baseUrl, apiKey };
+  const result = await testLlmConnection(override);
+  return result.ok ? { ok: true } : { ok: false, message: result.message };
+}
+
+/** Test the stored LLM settings inline on the settings page (no redirect). */
+export async function runLlmTestInline(): Promise<WizardActionResult> {
+  if (!(await getAuthenticatedUserId())) return { ok: false, message: "Not signed in." };
+  const result = await testLlmConnection();
+  return result.ok ? { ok: true } : { ok: false, message: result.message };
+}
+
+/** Verify + replace the Akahu tokens inline on the settings page (no redirect). */
+export async function replaceAkahuTokensInline(formData: FormData): Promise<WizardActionResult> {
+  if (!(await getAuthenticatedUserId())) return { ok: false, message: "Not signed in." };
+  if (getVaultConfigurationError()) return { ok: false, message: "Encryption key not configured." };
+  const userToken = String(formData.get("userToken") ?? "").trim();
+  const appToken = String(formData.get("appToken") ?? "").trim();
+  if (!userToken || !appToken) return { ok: false, message: "Both Akahu tokens are required." };
+  const result = await verifyAkahuTokens({ userToken, appToken });
+  if (result.status !== "connected") {
+    return { ok: false, message: result.status === "error" ? result.message : "Akahu did not accept those tokens." };
+  }
+  saveAkahuTokens({ userToken, appToken });
+  revalidatePath("/", "layout");
+  revalidatePath("/settings");
+  return { ok: true };
+}
+
+/** Return detected per-category usage for the onboarding "detected categories" step. */
+export async function wizardDetectCategories() {
+  if (!(await getAuthenticatedUserId())) return [];
+  return detectCategoryUsage();
+}
+
+export async function wizardDetectIncome() {
+  if (!(await getAuthenticatedUserId())) return null;
+  return detectIncome();
+}
+
+/** Confirm a detected recurring income so it populates the salary_monthly setting. */
+export async function confirmDetectedIncome(formData: FormData): Promise<WizardActionResult> {
+  if (!(await getAuthenticatedUserId())) return { ok: false, message: "Not signed in." };
+  const candidate = detectIncome();
+  if (!candidate) return { ok: false, message: "No recurring income detected." };
+  const monthly = Math.round(candidate.monthlyEquivalent * 100) / 100;
+  db.prepare(`
+    INSERT INTO finance_settings (key, value, updated_at) VALUES ('salary_monthly', ?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+  `).run(String(monthly), new Date().toISOString());
+  revalidatePath("/", "layout");
+  revalidatePath("/settings");
+  return { ok: true, message: `Income set to $${monthly}/month from ${candidate.merchant}.` };
 }

@@ -2,14 +2,20 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 import {
+  confirmDetectedIncome,
   createCategoriesFromWizard,
   finishOnboarding,
   saveBudgetAccounts,
+  wizardDetectCategories,
+  wizardDetectIncome,
   wizardSaveLlmSettings,
   wizardSaveTokens,
   wizardSync,
+  wizardTestLlm,
 } from "@/app/finance-actions";
+import { ConnectionBanner, type ConnectionState } from "@/components/connection-banner";
 import { SUGGESTED_CATEGORIES } from "@/lib/suggestions";
 import type { AccountCard } from "@/lib/finance-data";
 import type { LlmSettings } from "@/lib/llm";
@@ -19,13 +25,15 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+type DetectedCategory = { slug: string; name: string; count: number; spend: number };
+type IncomeCandidate = { merchant: string; cadence: string; monthlyEquivalent: number };
+
 const STEPS = [
   "Welcome",
   "Connect Akahu",
   "Your accounts",
   "Categories",
-  "Goals",
-  "Budgets",
+  "Budgets & goals",
   "AI (optional)",
   "Done",
 ];
@@ -73,6 +81,11 @@ export function OnboardingWizard({
 
   // Step 1: Akahu tokens
   const [tokensSaved, setTokensSaved] = useState(false);
+  const [userToken, setUserToken] = useState("");
+  const [appToken, setAppToken] = useState("");
+  const [tokenState, setTokenState] = useState<ConnectionState>({ status: "idle" });
+  const tokensSwapped =
+    /^app_token_/i.test(userToken) || /^user_token_/i.test(appToken);
   // Step 2: accounts
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>(
     accounts.map((a) => a.id),
@@ -85,16 +98,21 @@ export function OnboardingWizard({
         {
           name: c.name,
           color: c.color,
-          selected: ["groceries", "eating-out", "bills", "transport", "shopping", "health", "income", "other"].includes(c.id),
+            selected: c.id === "other",
         },
       ]),
     ),
   );
+  const [detectedCategories, setDetectedCategories] = useState<DetectedCategory[] | null>(null);
   const [customCategory, setCustomCategory] = useState("");
   const [customCategories, setCustomCategories] = useState<string[]>([]);
-  // Step 4: goal
+  // Step 4: goal (collapsed on budgets step) + income
   const [goal, setGoal] = useState({ name: "", target: "", contribution: "" });
   const [goalAdded, setGoalAdded] = useState(false);
+  const [showGoals, setShowGoals] = useState(false);
+  const [income, setIncome] = useState<IncomeCandidate | null>(null);
+  const [incomeConfirmed, setIncomeConfirmed] = useState(false);
+  const [incomeError, setIncomeError] = useState<string | null>(null);
   // Step 5: budgets
   const [budgets, setBudgets] = useState<Record<string, string>>({});
   // Step 6: AI
@@ -103,11 +121,68 @@ export function OnboardingWizard({
   const [aiModel, setAiModel] = useState(llm.model || "");
   const [aiBaseUrl, setAiBaseUrl] = useState(llm.baseUrl || "");
   const [aiKey, setAiKey] = useState("");
+  const [aiTestState, setAiTestState] = useState<ConnectionState>({ status: "idle" });
+  const aiFormValues = () => {
+    const form = new FormData();
+    form.append("enabled", aiEnabled ? "1" : "0");
+    form.append("provider", aiProvider);
+    form.append("model", aiModel);
+    form.append("baseUrl", aiBaseUrl);
+    form.append("apiKey", aiKey);
+    return form;
+  };
 
   const goTo = (next: number) => {
     setError(null);
     setStep(next);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const enterCategories = async () => {
+    setStep(3);
+    if (detectedCategories === null) {
+      startTransition(async () => {
+        try {
+          const detected = await wizardDetectCategories();
+          setDetectedCategories(detected);
+          if (detected.some((d) => d.count > 0)) {
+            setCategorySelection((prev) =>
+              Object.fromEntries(
+                SUGGESTED_CATEGORIES.map((c) => {
+                  const det = detected.find((d) => d.slug === c.id);
+                  const detectedNow = (det?.count ?? 0) > 0;
+                  const prevItem = prev[c.id] ?? { name: c.name, color: c.color, selected: false };
+                  return [
+                    c.id,
+                    {
+                      name: prevItem.name,
+                      color: prevItem.color,
+                      selected: detectedNow || c.id === "other",
+                    },
+                  ];
+                }),
+              ),
+            );
+          }
+        } catch {
+          // Non-fatal — fall back to the default category selection.
+        }
+      });
+    }
+  };
+
+  const enterBudgets = async () => {
+    setStep(4);
+    if (income === null && !incomeConfirmed) {
+      startTransition(async () => {
+        try {
+          const result = await wizardDetectIncome();
+          setIncome(result);
+        } catch {
+          setIncome(null);
+        }
+      });
+    }
   };
 
   const run = (fn: () => Promise<{ ok: boolean; message?: string } | void>) =>
@@ -130,10 +205,23 @@ export function OnboardingWizard({
     });
 
   const submitTokens = async (form: FormData) => {
+    setTokenState({ status: "testing", message: "Testing your Akahu connection…" });
     const ok = await run(() => wizardSaveTokens(form));
     if (ok) {
       setTokensSaved(true);
-      goTo(2);
+      setTokenState({
+        status: "ok",
+        message: "Tokens verified and encrypted.",
+      });
+      setTimeout(() => goTo(2), 900);
+    } else {
+      const base = error ?? "Akahu did not accept those tokens.";
+      setTokenState({
+        status: "fail",
+        message: tokensSwapped
+          ? "Those two tokens look swapped — the User Access Token (user_token_…) goes on top, the App ID Token (app_token_…) below."
+          : base,
+      });
     }
   };
 
@@ -144,7 +232,7 @@ export function OnboardingWizard({
     const form = new FormData();
     for (const id of ids) form.append("account_id", id);
     const ok = await run(() => saveBudgetAccounts(form));
-    if (ok) goTo(3);
+    if (ok) enterCategories();
   };
 
   const submitCategories = async () => {
@@ -162,7 +250,30 @@ export function OnboardingWizard({
       form.append(`color_custom-${name}`, "#4f8de7");
     }
     await run(() => createCategoriesFromWizard(form));
-    goTo(4);
+    enterBudgets();
+  };
+
+  const testAiConnection = async () => {
+    setAiTestState({ status: "testing", message: "Testing your AI connection…" });
+    const result = await wizardTestLlm(aiFormValues());
+    if (result.ok) {
+      setAiTestState({ status: "ok", message: "Connection test succeeded." });
+    } else {
+      setAiTestState({ status: "fail", message: result.message ?? "Connection failed." });
+    }
+  };
+
+  const confirmIncome = async () => {
+    if (!income) return;
+    setIncomeError(null);
+    const form = new FormData();
+    form.append("confirm", "1");
+    const result = await confirmDetectedIncome(form);
+    if (result.ok) {
+      setIncomeConfirmed(true);
+    } else {
+      setIncomeError(result.message ?? "Could not save income.");
+    }
   };
 
   const finish = async () => {
@@ -224,21 +335,37 @@ export function OnboardingWizard({
             <form action={submitTokens} className="space-y-3">
               <div className="space-y-1.5">
                 <Label htmlFor="userToken">Akahu User Access Token</Label>
-                <Input autoComplete="off" id="userToken" name="userToken" spellCheck={false} type="password" />
+                <Input autoComplete="off" id="userToken" name="userToken" onChange={(e) => setUserToken(e.target.value)} placeholder="user_token_…" spellCheck={false} type="password" value={userToken} />
+                <p className="font-mono text-[10px] text-[#9a9a9a]">Starts with <span className="text-[#7a7a7a]">user_token_</span></p>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="appToken">Akahu App ID Token</Label>
-                <Input autoComplete="off" id="appToken" name="appToken" spellCheck={false} type="password" />
+                <Input autoComplete="off" id="appToken" name="appToken" onChange={(e) => setAppToken(e.target.value)} placeholder="app_token_…" spellCheck={false} type="password" value={appToken} />
+                <p className="font-mono text-[10px] text-[#9a9a9a]">Starts with <span className="text-[#7a7a7a]">app_token_</span></p>
               </div>
+              {tokensSwapped && !tokensSaved && (
+                <ConnectionBanner
+                  state={{ status: "warn", message: "These look swapped — the User Access Token goes in the top field, the App ID Token in the bottom." }}
+                />
+              )}
               <div className="flex items-center justify-between gap-3 pt-2">
                 <Button onClick={() => goTo(0)} type="button" variant="ghost">Back</Button>
                 <div className="flex items-center gap-3">
                   <Button onClick={() => goTo(2)} type="button" variant="outline">Skip for now</Button>
-                  <Button disabled={pending} type="submit" variant="primary">Verify & continue</Button>
+                  <Button disabled={pending} type="submit" variant="primary">
+                    {pending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Testing…
+                      </>
+                    ) : (
+                      "Verify & continue"
+                    )}
+                  </Button>
                 </div>
               </div>
             </form>
-            {tokensSaved && <p className="text-sm text-[#1a5c2a]">✓ Tokens verified and saved.</p>}
+            <ConnectionBanner state={tokenState} />
             {stepError}
           </div>
         )}
@@ -290,33 +417,48 @@ export function OnboardingWizard({
         {step === 3 && (
           <div className="space-y-4">
             <p className="text-sm leading-6 text-[#4a4a4a]">
-              Build your own spending categories. Tick the ones you want, rename them, pick a colour, or add your own.
-              “Other” is kept as the fallback for anything unclassified.
+              We found these categories in your transactions and pre-ticked them. Rename, recolor, untick, or add your own.
+              “Other” stays as the fallback for anything unclassified.
             </p>
+            {detectedCategories === null && <p className="text-sm text-[#7a7a7a]">Analysing your transactions…</p>}
             <div className="grid gap-2">
-              {Object.entries(categorySelection).map(([slug, item]) => (
-                <div className="flex items-center gap-3 border border-[#c8bea8] bg-[#faf8f3] px-3 py-2" key={slug}>
-                  <Checkbox
-                    checked={item.selected}
-                    onCheckedChange={(checked) =>
-                      setCategorySelection((prev) => ({ ...prev, [slug]: { ...prev[slug], selected: !!checked } }))
-                    }
-                  />
-                  <input
-                    className="w-40 border border-transparent bg-transparent px-1 py-0.5 text-sm text-[#1a1a1a] outline-none focus:border-[#c8bea8]"
-                    value={item.name}
-                    onChange={(e) => setCategorySelection((prev) => ({ ...prev, [slug]: { ...prev[slug], name: e.target.value } }))}
-                    disabled={!item.selected}
-                  />
-                  <input
-                    className="ml-auto h-7 w-9 cursor-pointer border border-[#c8bea8] bg-[#faf8f3]"
-                    type="color"
-                    value={item.color}
-                    onChange={(e) => setCategorySelection((prev) => ({ ...prev, [slug]: { ...prev[slug], color: e.target.value } }))}
-                    disabled={!item.selected}
-                  />
-                </div>
-              ))}
+              {Object.entries(categorySelection).map(([slug, item]) => {
+                const det = detectedCategories?.find((d) => d.slug === slug);
+                const detectedNow = (det?.count ?? 0) > 0;
+                const isOther = slug === "other";
+                return (
+                  <div
+                    className={`flex items-center gap-3 border border-[#c8bea8] bg-[#faf8f3] px-3 py-2 ${!detectedNow && !isOther ? "opacity-70" : ""}`}
+                    key={slug}
+                  >
+                    <Checkbox
+                      checked={item.selected}
+                      onCheckedChange={(checked) =>
+                        setCategorySelection((prev) => ({ ...prev, [slug]: { ...prev[slug], selected: !!checked } }))
+                      }
+                    />
+                    <input
+                      className="w-40 border border-transparent bg-transparent px-1 py-0.5 text-sm text-[#1a1a1a] outline-none focus:border-[#c8bea8]"
+                      value={item.name}
+                      onChange={(e) => setCategorySelection((prev) => ({ ...prev, [slug]: { ...prev[slug], name: e.target.value } }))}
+                      disabled={!item.selected}
+                    />
+                    {det && (
+                      <span className="text-xs text-[#9a9a9a]">
+                        {det.count} txn{det.count === 1 ? "" : "s"}
+                        {det.spend ? ` · $${det.spend.toFixed(0)} last 12 mo` : ""}
+                      </span>
+                    )}
+                    <input
+                      className="ml-auto h-7 w-9 cursor-pointer border border-[#c8bea8] bg-[#faf8f3]"
+                      type="color"
+                      value={item.color}
+                      onChange={(e) => setCategorySelection((prev) => ({ ...prev, [slug]: { ...prev[slug], color: e.target.value } }))}
+                      disabled={!item.selected}
+                    />
+                  </div>
+                );
+              })}
               {customCategories.map((name) => (
                 <div className="flex items-center gap-3 border border-[#c8bea8] bg-[#faf8f3] px-3 py-2" key={name}>
                   <span className="h-4 w-4 rounded-full" style={{ backgroundColor: "#4f8de7" }} />
@@ -347,62 +489,23 @@ export function OnboardingWizard({
           </div>
         )}
 
-        {/* STEP 4: Goals */}
+        {/* STEP 4: Budgets & goals */}
         {step === 4 && (
           <div className="space-y-4">
-            <p className="text-sm leading-6 text-[#4a4a4a]">
-              Optional: create your own savings goals (e.g. “Holiday”, “New car”). You can add more anytime in Settings.
-            </p>
-            {goalAdded && (
-              <div className="flex items-center justify-between border border-[#c8bea8] bg-[#faf8f3] px-3 py-2.5">
-                <span className="text-sm text-[#1a1a1a]">{goal.name}</span>
-                <span className="font-mono text-[10px] text-[#7a7a7a]">target ${goal.target}</span>
+            {income && !incomeConfirmed && (
+              <div className="border border-[#c8bea8] bg-[#faf8f3] p-4">
+                <p className="text-sm font-semibold text-[#1c2b3a]">We detected your income</p>
+                <p className="mt-1 text-sm leading-5 text-[#4a4a4a]">
+                  About <span className="font-semibold text-[#1c2b3a]">${income.monthlyEquivalent.toFixed(0)}/mo</span>
+                  {income.cadence ? ` (${income.cadence})` : ""} — looks like {income.merchant}. Confirm to enable income-aware budgeting.
+                </p>
+                {incomeError && <p className="mt-2 text-sm text-[#a33d2e]">{incomeError}</p>}
+                <div className="mt-3 flex gap-2">
+                  <Button onClick={confirmIncome} size="sm" type="button" variant="primary">That&apos;s right</Button>
+                  <Button onClick={() => setIncomeConfirmed(true)} size="sm" type="button" variant="ghost">Skip</Button>
+                </div>
               </div>
             )}
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="goalName">Name</Label>
-                <Input id="goalName" onChange={(e) => setGoal((g) => ({ ...g, name: e.target.value }))} placeholder="e.g. Holiday" value={goal.name} />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="goalTarget">Target ($)</Label>
-                <Input id="goalTarget" min="0" onChange={(e) => setGoal((g) => ({ ...g, target: e.target.value }))} type="number" value={goal.target} />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="goalContribution">Monthly ($)</Label>
-                <Input id="goalContribution" min="0" onChange={(e) => setGoal((g) => ({ ...g, contribution: e.target.value }))} type="number" value={goal.contribution} />
-              </div>
-            </div>
-            <Button
-              disabled={pending || !goal.name || !goal.target}
-              onClick={async () => {
-                const form = new FormData();
-                form.append("name", goal.name);
-                form.append("target", goal.target);
-                form.append("contribution", goal.contribution || "0");
-                const ok = await run(async () => {
-                  const { addGoal } = await import("@/app/finance-actions");
-                  await addGoal(form);
-                  return { ok: true };
-                });
-                if (ok) setGoalAdded(true);
-              }}
-              type="button"
-              variant="outline"
-            >
-              Add goal
-            </Button>
-            <div className="flex items-center justify-between gap-3">
-              <Button onClick={() => goTo(3)} type="button" variant="ghost">Back</Button>
-              <Button disabled={pending} onClick={() => goTo(5)} variant="primary">Continue</Button>
-            </div>
-            {stepError}
-          </div>
-        )}
-
-        {/* STEP 5: Budgets */}
-        {step === 5 && (
-          <div className="space-y-4">
             <p className="text-sm leading-6 text-[#4a4a4a]">
               Optional: set a monthly target for each category you chose. You can change these anytime on the Budget page.
             </p>
@@ -427,8 +530,64 @@ export function OnboardingWizard({
                   </div>
                 </div>
               ))}
+            <div className="border-t border-[#e6e0d2] pt-4">
+              <button
+                className="flex items-center gap-2 text-sm font-semibold text-[#1c2b3a]"
+                onClick={() => setShowGoals((s) => !s)}
+                type="button"
+              >
+                <span className={`inline-block transition-transform ${showGoals ? "rotate-90" : ""}`}>▸</span>
+                Goals {goalAdded && <span className="font-normal text-[#1a5c2a]">· added</span>}
+              </button>
+              {showGoals && (
+                <div className="mt-3 space-y-3">
+                  <p className="text-sm leading-5 text-[#7a7a7a]">
+                    Optional: create your own savings goals (e.g. “Holiday”). You can add more anytime in Settings.
+                  </p>
+                  {goalAdded && (
+                    <div className="flex items-center justify-between border border-[#c8bea8] bg-[#faf8f3] px-3 py-2.5">
+                      <span className="text-sm text-[#1a1a1a]">{goal.name}</span>
+                      <span className="font-mono text-[10px] text-[#7a7a7a]">target ${goal.target}</span>
+                    </div>
+                  )}
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="goalName">Name</Label>
+                      <Input id="goalName" onChange={(e) => setGoal((g) => ({ ...g, name: e.target.value }))} placeholder="e.g. Holiday" value={goal.name} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="goalTarget">Target ($)</Label>
+                      <Input id="goalTarget" min="0" onChange={(e) => setGoal((g) => ({ ...g, target: e.target.value }))} type="number" value={goal.target} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="goalContribution">Monthly ($)</Label>
+                      <Input id="goalContribution" min="0" onChange={(e) => setGoal((g) => ({ ...g, contribution: e.target.value }))} type="number" value={goal.contribution} />
+                    </div>
+                  </div>
+                  <Button
+                    disabled={pending || !goal.name || !goal.target}
+                    onClick={async () => {
+                      const form = new FormData();
+                      form.append("name", goal.name);
+                      form.append("target", goal.target);
+                      form.append("contribution", goal.contribution || "0");
+                      const ok = await run(async () => {
+                        const { addGoal } = await import("@/app/finance-actions");
+                        await addGoal(form);
+                        return { ok: true };
+                      });
+                      if (ok) setGoalAdded(true);
+                    }}
+                    type="button"
+                    variant="outline"
+                  >
+                    Add goal
+                  </Button>
+                </div>
+              )}
+            </div>
             <div className="flex items-center justify-between gap-3">
-              <Button onClick={() => goTo(4)} type="button" variant="ghost">Back</Button>
+              <Button onClick={() => goTo(3)} type="button" variant="ghost">Back</Button>
               <Button
                 disabled={pending}
                 onClick={async () => {
@@ -441,7 +600,7 @@ export function OnboardingWizard({
                     await updateBudgets(form);
                     return { ok: true };
                   });
-                  if (ok) goTo(6);
+                  if (ok) goTo(5);
                 }}
                 variant="primary"
               >
@@ -452,8 +611,8 @@ export function OnboardingWizard({
           </div>
         )}
 
-        {/* STEP 6: AI */}
-        {step === 6 && (
+        {/* STEP 5: AI */}
+        {step === 5 && (
           <div className="space-y-4">
             <p className="text-sm leading-6 text-[#4a4a4a]">
               Optional: use a bring-your-own LLM to help label transactions. Off by default. When on, descriptions of unmatched
@@ -486,8 +645,14 @@ export function OnboardingWizard({
                 <Input autoComplete="off" id="aiKey" onChange={(e) => setAiKey(e.target.value)} placeholder="sk-…" type="password" value={aiKey} />
               </div>
             </div>
+            <div className="flex items-center gap-3">
+              <Button disabled={pending} onClick={testAiConnection} type="button" variant="outline">
+                Test connection
+              </Button>
+              <ConnectionBanner state={aiTestState} />
+            </div>
             <div className="flex items-center justify-between gap-3">
-              <Button onClick={() => goTo(5)} type="button" variant="ghost">Back</Button>
+              <Button onClick={() => goTo(4)} type="button" variant="ghost">Back</Button>
               <div className="flex items-center gap-3">
                 <Button
                   disabled={pending}
@@ -500,7 +665,7 @@ export function OnboardingWizard({
                     form.append("apiKey", aiKey);
                     const ok = await run(() => wizardSaveLlmSettings(form));
                     if (ok) {
-                      goTo(7);
+                      goTo(6);
                     }
                   }}
                   type="button"
@@ -514,8 +679,8 @@ export function OnboardingWizard({
           </div>
         )}
 
-        {/* STEP 7: Done */}
-        {step === 7 && (
+        {/* STEP 6: Done */}
+        {step === 6 && (
           <div className="space-y-5">
             <p className="text-sm leading-6 text-[#4a4a4a]">
               You&apos;re all set! Sync your transactions to start budgeting and reviewing. You can always adjust categories,

@@ -107,24 +107,36 @@ export async function syncFinanceData(tokens: AkahuTokens): Promise<SyncResult> 
           WHEN EXISTS (
             SELECT 1 FROM transaction_overrides WHERE transaction_id = excluded.id
           ) THEN cached_transactions.category_id
+          WHEN cached_transactions.category_id IS NULL
+            OR cached_transactions.category_source = 'UNCATEGORISED'
+          THEN excluded.category_id
           ELSE cached_transactions.category_id
         END,
         category_source = CASE
           WHEN EXISTS (
             SELECT 1 FROM transaction_overrides WHERE transaction_id = excluded.id
           ) THEN 'MANUAL'
+          WHEN cached_transactions.category_id IS NULL
+            OR cached_transactions.category_source = 'UNCATEGORISED'
+          THEN excluded.category_source
           ELSE cached_transactions.category_source
         END,
         confidence = CASE
           WHEN EXISTS (
             SELECT 1 FROM transaction_overrides WHERE transaction_id = excluded.id
           ) THEN 1
+          WHEN cached_transactions.category_id IS NULL
+            OR cached_transactions.category_source = 'UNCATEGORISED'
+          THEN excluded.confidence
           ELSE cached_transactions.confidence
         END,
         reviewed = CASE
           WHEN EXISTS (
             SELECT 1 FROM transaction_overrides WHERE transaction_id = excluded.id
           ) THEN 1
+          WHEN cached_transactions.category_id IS NULL
+            OR cached_transactions.category_source = 'UNCATEGORISED'
+          THEN excluded.reviewed
           ELSE cached_transactions.reviewed
         END,
         is_hidden = excluded.is_hidden,

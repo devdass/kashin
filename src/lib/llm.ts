@@ -237,8 +237,10 @@ export async function categorizeWithLlm(
   return results;
 }
 
-export async function testLlmConnection(): Promise<{ ok: boolean; message: string }> {
-  const settings = getLlmSettings();
+export async function testLlmConnection(
+  override?: Partial<LlmSettings>,
+): Promise<{ ok: boolean; message: string }> {
+  const settings = { ...getLlmSettings(), ...(override ?? {}) };
   if (!settings.apiKey) return { ok: false, message: "No API key configured" };
   try {
     const result = await callProvider(

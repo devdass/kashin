@@ -10,9 +10,9 @@ import {
   deleteTravelWindow,
   disconnectAkahu,
   renameCategory,
-  replaceAkahuTokens,
+  replaceAkahuTokensInline,
   resetLocalData,
-  runLlmTest,
+  runLlmTestInline,
   saveBudgetAccounts,
   saveLlmSettings,
   savePreferences,
@@ -20,6 +20,7 @@ import {
   updateGoal,
 } from "@/app/finance-actions";
 import { Collapsible } from "@/components/collapsible";
+import { InlineActionForm } from "@/components/connection-test";
 import { FinanceShell } from "@/components/finance-shell";
 import { requireAuthenticatedUser } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -128,19 +129,22 @@ export default async function SettingsPage({
               </button>
             </form>
           ) : null}
-          <form action={replaceAkahuTokens} className="mt-3 grid gap-3">
+          <InlineActionForm
+            action={replaceAkahuTokensInline}
+            idleLabel={tokensConfigured ? "Verify & replace tokens" : "Verify & store tokens"}
+            pendingLabel="Verifying…"
+            okMessage="Tokens verified and encrypted."
+            className="mt-3 grid gap-3"
+          >
             <label className="grid gap-1.5 text-sm text-[#4a4a4a]">
-              User Access Token
+              User Access Token <span className="font-mono text-[10px] text-[#9a9a9a]">starts with user_token_</span>
               <input autoComplete="off" className="field font-mono" name="userToken" spellCheck={false} type="password" />
             </label>
             <label className="grid gap-1.5 text-sm text-[#4a4a4a]">
-              App ID Token
+              App ID Token <span className="font-mono text-[10px] text-[#9a9a9a]">starts with app_token_</span>
               <input autoComplete="off" className="field font-mono" name="appToken" spellCheck={false} type="password" />
             </label>
-            <button className="min-h-10 border border-[#1c2b3a] text-xs font-semibold text-[#1c2b3a] transition hover:bg-[#1c2b3a] hover:text-white" type="submit">
-              {tokensConfigured ? "Verify & replace tokens" : "Verify & store tokens"}
-            </button>
-          </form>
+          </InlineActionForm>
         </div>
       </div>
 
@@ -218,19 +222,22 @@ export default async function SettingsPage({
             </button>
           </div>
         </form>
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <form action={runLlmTest}>
-            <button className="min-h-10 border border-[#1c2b3a] px-4 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-[#1a3a5c] transition hover:bg-[#1c2b3a] hover:text-white" type="submit">
-              Test connection
-            </button>
-          </form>
-          {llm.apiKey ? (
-            <form action={clearLlmApiKey}>
-              <button className="min-h-10 px-2 font-mono text-[10px] uppercase tracking-[0.07em] text-[#b43b31] hover:underline" type="submit">
-                Clear key
-              </button>
-            </form>
-          ) : null}
+        <div className="mt-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <InlineActionForm
+              action={runLlmTestInline}
+              idleLabel="Test connection"
+              pendingLabel="Testing…"
+              okMessage="Connection test succeeded."
+            />
+            {llm.apiKey ? (
+              <form action={clearLlmApiKey}>
+                <button className="min-h-10 px-2 font-mono text-[10px] uppercase tracking-[0.07em] text-[#b43b31] hover:underline" type="submit">
+                  Clear key
+                </button>
+              </form>
+            ) : null}
+          </div>
         </div>
         <div className="mt-4 border-t border-[#c8bea8]/60 pt-4">
           <p className="text-sm text-[#4a4a4a]">Run local rules plus AI over the review backlog now.</p>

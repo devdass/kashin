@@ -157,7 +157,7 @@ type RuleRow = {
 type TravelWindowRow = { starts_on: string; ends_on: string };
 
 export type CategoryDecision = {
-  categoryId: string;
+  categoryId: string | null;
   source: "VENDOR" | "SPECIAL_RULE" | "AKAHU" | "UNCATEGORISED";
   confidence: number;
   reviewed: boolean;
@@ -199,6 +199,58 @@ const descriptionCategoryMappings: Array<[RegExp, string]> = (() => {
     return [];
   }
 })();
+
+/**
+ * Pure slug-only mapping for a transaction (no DB lookups). Used for detecting
+ * which categories a user actually has spending in, so it covers the same special
+ * rules + merchant-hint + Akahu-category heuristics as the categorizer but stops
+ * at the slug (no vendor rules / user categories needed). Returns the matching
+ * slug or null when nothing maps.
+ */
+export function mapTransactionToSlug(
+  transaction: {
+    date: string;
+    type: string;
+    amount: number;
+    description: string;
+    merchant?: string | null;
+    category?: string | null;
+    categoryGroup?: string | null;
+  },
+  travelWindows: Array<{ starts_on: string; ends_on: string }> = [],
+): string | null {
+  if (transaction.type === "ATM") return "cash";
+
+  if (["TRANSFER", "CREDIT CARD", "LOAN"].includes(transaction.type)) {
+    return "transfers-other";
+  }
+
+  const lowerDescription = transaction.description.toLowerCase();
+  if (/^(to|frm) \d/.test(lowerDescription)) return "transfers-other";
+
+  if (transaction.type === "DIRECT CREDIT" && transaction.amount > 0) {
+    return "income";
+  }
+
+  const merchantText = `${transaction.merchant ?? ""} ${transaction.description}`.toLowerCase();
+  for (const [pattern, slug] of descriptionCategoryMappings) {
+    if (pattern.test(merchantText)) return slug;
+  }
+
+  if (travelWindows.length > 0 && transaction.categoryGroup === "Travel") {
+    const date = transaction.date.slice(0, 10);
+    if (travelWindows.some((window) => date >= window.starts_on && date <= window.ends_on)) {
+      return "travel";
+    }
+  }
+
+  const upstream = `${transaction.category ?? ""} ${transaction.categoryGroup ?? ""}`;
+  for (const [pattern, slug] of akahuCategoryMappings) {
+    if (pattern.test(upstream)) return slug;
+  }
+
+  return null;
+}
 
 export function buildCategorizer() {
   const rules = db
@@ -302,7 +354,7 @@ export function buildCategorizer() {
     }
 
     return {
-      categoryId: fallbackId ?? "other",
+      categoryId: fallbackId ?? null,
       source: "UNCATEGORISED",
       confidence: 0.25,
       reviewed: false,
@@ -353,25 +405,6 @@ export function classifyUnreviewed(limit = 500): { total: number; resolved: numb
     .run("LOCAL", now);
   const runId = Number(run.lastInsertRowid);
 
-  const unreviewed = db
-    .prepare(`
-      SELECT id, date, description, amount, type, merchant,
-        akahu_category AS category, akahu_category_group AS categoryGroup,
-        normalized_merchant
-      FROM cached_transactions WHERE reviewed = 0 AND is_hidden = 0 LIMIT ${limit}
-    `)
-    .all() as Array<{
-    id: string;
-    date: string;
-    description: string;
-    amount: number;
-    type: string;
-    merchant: string | null;
-    category: string | null;
-    categoryGroup: string | null;
-    normalized_merchant: string;
-  }>;
-
   const occurrenceCounts = new Map<string, number>(
     (
       db
@@ -387,105 +420,149 @@ export function classifyUnreviewed(limit = 500): { total: number; resolved: numb
   }
   const resolveSlug = (slug: string): string | undefined =>
     slugToId.get(slugify(slug)) ?? slugToId.get(slug);
+  const fallbackId = resolveSlug("other");
 
+  const unreviewedStatement = db.prepare(`
+    SELECT id, date, description, amount, type, merchant,
+      akahu_category AS category, akahu_category_group AS categoryGroup,
+      normalized_merchant
+    FROM cached_transactions
+    WHERE reviewed = 0 AND is_hidden = 0
+    ORDER BY date DESC
+    LIMIT ${Math.max(1, Math.floor(limit))}
+  `);
+
+  const upsertRule = db.prepare(`
+    INSERT INTO vendor_rules
+      (vendor, normalized_vendor, category_id, source, confidence, created_at, updated_at)
+    VALUES (?, ?, ?, 'ASSISTED', 0.95, ?, ?)
+    ON CONFLICT(normalized_vendor) DO UPDATE SET
+      category_id = excluded.category_id,
+      source = 'ASSISTED', confidence = 0.95, updated_at = excluded.updated_at
+  `);
+  const decision = db.prepare(`
+    INSERT OR IGNORE INTO classification_decisions
+      (run_id, transaction_id, category_id, resolved, source, confidence, reasoning, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const setResolved = db.prepare(`
+    UPDATE cached_transactions SET category_id = ?, category_source = ?, confidence = ?, reviewed = 1
+    WHERE id = ?
+  `);
+
+  let total = 0;
   let resolved = 0;
-  const save = db.transaction(() => {
-    const upsertRule = db.prepare(`
-      INSERT INTO vendor_rules
-        (vendor, normalized_vendor, category_id, source, confidence, created_at, updated_at)
-      VALUES (?, ?, ?, 'ASSISTED', 0.95, ?, ?)
-      ON CONFLICT(normalized_vendor) DO UPDATE SET
-        category_id = excluded.category_id,
-        source = 'ASSISTED', confidence = 0.95, updated_at = excluded.updated_at
-    `);
-    const decision = db.prepare(`
-      INSERT INTO classification_decisions
-        (run_id, transaction_id, category_id, resolved, source, confidence, reasoning, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    const setResolved = db.prepare(`
-      UPDATE cached_transactions SET category_id = ?, category_source = ?, confidence = ?, reviewed = 1
-      WHERE id = ?
-    `);
+  let deferred = 0;
+  const MAX_ROWS = 10_000;
 
-    for (const transaction of unreviewed) {
-      const description = transaction.description.toLowerCase();
-      let categoryId: string | null = null;
-      let source = "ASSISTED" as "ASSISTED" | "VENDOR" | "SPECIAL_RULE";
-      let confidence = 0.95;
-      let reasoning = "";
+  while (total < MAX_ROWS) {
+    const unreviewed = unreviewedStatement.all() as Array<{
+      id: string;
+      date: string;
+      description: string;
+      amount: number;
+      type: string;
+      merchant: string | null;
+      category: string | null;
+      categoryGroup: string | null;
+      normalized_merchant: string;
+    }>;
+    if (unreviewed.length === 0) break;
 
-      if (description.startsWith("loan repayment")) {
-        const housingId = resolveSlug("housing");
-        if (!housingId) {
-          decision.run(runId, transaction.id, null, 0, "ASSISTED", 0, "Deferred to manual review", now);
-          continue;
-        }
-        categoryId = housingId;
-        confidence = 1;
-        reasoning = "Recurring loan repayment described as such";
-      } else if (
-        transaction.amount > 0 &&
-        ["PAYMENT", "STANDING ORDER"].includes(transaction.type) &&
-        (occurrenceCounts.get(transaction.normalized_merchant) ?? 0) >= 2
-      ) {
-        const incomeId = resolveSlug("income");
-        if (!incomeId) {
-          decision.run(runId, transaction.id, null, 0, "ASSISTED", 0, "Deferred to manual review", now);
-          continue;
-        }
-        categoryId = incomeId;
-        reasoning = "Recurring household inflow (board, rent, or contributions)";
-      } else {
-        const decision = categorizer(transaction as unknown as AkahuTransaction);
-        if (decision.source !== "UNCATEGORISED" && decision.source !== "AKAHU") {
-          categoryId = decision.categoryId;
-          confidence = decision.confidence;
-          source = decision.source;
-          reasoning = "Existing vendor or special rule";
-        } else if (decision.source === "AKAHU") {
-          categoryId = decision.categoryId;
-          reasoning = "Promoted Akahu suggestion to a confirmed vendor rule";
-        } else {
-          const promoted = promotionCategory(transaction as unknown as AkahuTransaction);
-          if (promoted) {
-            categoryId = promoted;
-            reasoning = "Akahu category promoted to confirmed vendor rule";
+    const batchResolvedBefore = resolved;
+    const batchDeferredBefore = deferred;
+    const save = db.transaction(() => {
+      for (const transaction of unreviewed) {
+        const description = transaction.description.toLowerCase();
+        let categoryId: string | null = null;
+        let source = "ASSISTED" as "ASSISTED" | "VENDOR" | "SPECIAL_RULE";
+        let confidence = 0.95;
+        let reasoning = "";
+
+        if (description.startsWith("loan repayment")) {
+          const housingId = resolveSlug("housing");
+          if (!housingId) {
+            decision.run(runId, transaction.id, null, 0, "ASSISTED", 0, "Deferred to manual review", now);
+            deferred += 1;
+            continue;
           }
+          categoryId = housingId;
+          confidence = 1;
+          reasoning = "Recurring loan repayment described as such";
+        } else if (
+          transaction.amount > 0 &&
+          ["PAYMENT", "STANDING ORDER"].includes(transaction.type) &&
+          (occurrenceCounts.get(transaction.normalized_merchant) ?? 0) >= 2
+        ) {
+          const incomeId = resolveSlug("income");
+          if (!incomeId) {
+            decision.run(runId, transaction.id, null, 0, "ASSISTED", 0, "Deferred to manual review", now);
+            deferred += 1;
+            continue;
+          }
+          categoryId = incomeId;
+          reasoning = "Recurring household inflow (board, rent, or contributions)";
+          } else {
+            const categoryDecision = categorizer(transaction as unknown as AkahuTransaction);
+            if (categoryDecision.source !== "UNCATEGORISED") {
+              categoryId = categoryDecision.categoryId;
+              confidence = categoryDecision.confidence;
+              source = categoryDecision.source === "AKAHU" ? "SPECIAL_RULE" : categoryDecision.source;
+              reasoning = "Existing vendor or special rule";
+            } else {
+              const promoted = promotionCategory(transaction as unknown as AkahuTransaction);
+              if (promoted) {
+                categoryId = promoted;
+                reasoning = "Akahu category promoted to confirmed vendor rule";
+              }
+            }
         }
-      }
 
-      if (!categoryId) {
-        decision.run(runId, transaction.id, null, 0, "ASSISTED", 0, "Deferred to manual review", now);
-        continue;
-      }
+        if (!categoryId) {
+          // Rows without a known category remain in the review queue, but still
+          // receive a concrete fallback so the dashboard is never empty after
+          // onboarding. The review source preserves that they need attention.
+          categoryId = fallbackId ?? null;
+        }
+        if (!categoryId) {
+          decision.run(runId, transaction.id, null, 0, "ASSISTED", 0, "Deferred to manual review", now);
+          deferred += 1;
+          continue;
+        }
 
-      if (
-        transaction.normalized_merchant &&
-        transaction.normalized_merchant.length >= 3
-      ) {
-        upsertRule.run(
-          transaction.merchant ?? transaction.description,
-          transaction.normalized_merchant,
-          categoryId,
-          now,
-          now,
-        );
+        if (
+          transaction.normalized_merchant &&
+          transaction.normalized_merchant.length >= 3
+        ) {
+          upsertRule.run(
+            transaction.merchant ?? transaction.description,
+            transaction.normalized_merchant,
+            categoryId,
+            now,
+            now,
+          );
+        }
+        setResolved.run(categoryId, source, confidence, transaction.id);
+        decision.run(runId, transaction.id, categoryId, 1, source, confidence, reasoning, now);
+        resolved += 1;
       }
-      setResolved.run(categoryId, source, confidence, transaction.id);
-      decision.run(runId, transaction.id, categoryId, 1, source, confidence, reasoning, now);
-      resolved += 1;
-    }
-  });
-  save();
+    });
+    save();
+    total += unreviewed.length;
+    // Guard against an infinite loop when a batch resolves nothing (e.g. every
+    // row deferred to manual review — those stay `reviewed = 0` and would be
+    // re-selected forever).
+    if (resolved === batchResolvedBefore && deferred === batchDeferredBefore) break;
+    if (unreviewed.length < Math.max(1, Math.floor(limit))) break;
+  }
 
   db.prepare(`
     UPDATE classification_runs SET completed_at = ?, status = 'SUCCESS',
       items_total = ?, items_resolved = ?, items_deferred = ?
     WHERE id = ?
-  `).run(now, unreviewed.length, resolved, unreviewed.length - resolved, runId);
+  `).run(now, total, resolved, deferred, runId);
 
-  return { total: unreviewed.length, resolved, deferred: unreviewed.length - resolved };
+  return { total, resolved, deferred };
 }
 
 export function classifyBacklog(): { total: number; resolved: number; deferred: number } {
@@ -503,10 +580,8 @@ export async function classifyUnreviewedWithLlm(
 ): Promise<{ total: number; resolved: number; deferred: number; llm: number }> {
   const rulesResult = classifyUnreviewed(limit);
 
-  const settings = (await import("@/lib/llm")).getLlmSettings();
-  if (!settings.enabled) {
-    return { ...rulesResult, llm: 0 };
-  }
+    const settings = (await import("@/lib/llm")).getLlmSettings();
+    if (!settings.enabled) return { ...rulesResult, llm: 0 };
 
   const categoryNames = (db
     .prepare("SELECT name FROM categories WHERE archived = 0 ORDER BY sort_order")
@@ -546,7 +621,7 @@ export async function classifyUnreviewedWithLlm(
       WHERE id = ? AND reviewed = 0
     `);
     const decision = db.prepare(`
-      INSERT INTO classification_decisions
+      INSERT OR IGNORE INTO classification_decisions
         (run_id, transaction_id, category_id, resolved, source, confidence, reasoning, created_at)
       VALUES (?, ?, ?, 0, 'LLM', ?, ?, ?)
     `);
