@@ -7,7 +7,7 @@ keeps everything in a local SQLite file on your machine, and helps you budget,
 track savings goals, and review your spending — privately, with no cloud
 database and no account.
 
-![Kashin dashboard](https://via.placeholder.com/1200x600/1c2b3a/ffffff?text=Kashin+Dashboard+Preview)
+![Kashin dashboard](public/screenshots/dashboard.png)
 
 ## Why Kashin
 
