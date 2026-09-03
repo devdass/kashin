@@ -76,9 +76,19 @@ export function OnboardingWizard({
   // Step 2: accounts
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>(
     accounts.map((a) => a.id),
-  );  // Step 3: categories
+  );  // Step 3: categories — pre-check the common defaults so the user gets a useful
+  // baseline they can uncheck, rename, or add to. "Other" is always kept.
   const [categorySelection, setCategorySelection] = useState<Record<string, { name: string; color: string; selected: boolean }>>(
-    Object.fromEntries(SUGGESTED_CATEGORIES.map((c) => [c.id, { name: c.name, color: c.color, selected: c.id === "other" }])),
+    Object.fromEntries(
+      SUGGESTED_CATEGORIES.map((c) => [
+        c.id,
+        {
+          name: c.name,
+          color: c.color,
+          selected: ["groceries", "eating-out", "bills", "transport", "shopping", "health", "income", "other"].includes(c.id),
+        },
+      ]),
+    ),
   );
   const [customCategory, setCustomCategory] = useState("");
   const [customCategories, setCustomCategories] = useState<string[]>([]);
@@ -262,7 +272,7 @@ export function OnboardingWizard({
                     />
                     <span className="min-w-0">
                       <span className="block truncate text-sm text-[#1a1a1a]">{account.displayName}</span>
-                      <span className="block font-mono text-[9px] uppercase tracking-[0.05em] text-[#9a9a9a]">{account.institution} · {account.type}</span>
+                      <span className="block font-mono text-[9px] uppercase tracking-[0.05em] text-[#9a9a9a]">{account.institution} · {account.type}{account.formattedAccount ? ` · ${account.formattedAccount}` : ""}</span>
                     </span>
                   </label>
                 ))}

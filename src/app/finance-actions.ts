@@ -583,6 +583,9 @@ export async function finishOnboarding(): Promise<WizardActionResult> {
     INSERT INTO finance_settings (key, value, updated_at) VALUES ('onboarding_complete', '1', ?)
     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
   `).run(new Date().toISOString());
+  // Re-categorise the synced backlog using the user's newly built categories so the
+  // dashboard isn't a wall of "Uncategorised" right after onboarding.
+  await classifyUnreviewedWithLlm();
   revalidatePath("/", "layout");
   revalidatePath("/welcome");
   return { ok: true };
