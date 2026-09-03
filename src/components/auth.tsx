@@ -50,12 +50,12 @@ export function VercelBanner() {
 export function LoginForm({ notice }: { notice?: string }) {
   return (
     <AuthShell>
-      <div className="px-5 py-7">
+      <div className="px-5 py-8 sm:px-8 sm:py-10">
         <VercelBanner />
         <AuthNotice value={notice} />
-        <p className="eyebrow">Welcome back</p>
-        <h1 className="mt-3 font-serif text-3xl font-bold text-[#1c2b3a]">Unlock your dashboard.</h1>
-        <form action={login} className="mt-5 grid gap-3">
+        <p className="eyebrow text-[#806b2e]">Welcome back</p>
+        <h1 className="mt-3 max-w-md font-serif text-2xl font-bold leading-tight text-[#1c2b3a] sm:text-3xl">Unlock your dashboard.</h1>
+        <form action={login} className="mt-6 grid gap-3">
           <label className="grid gap-2 text-sm text-[#4a4a4a]">
             Password
             <input required autoFocus autoComplete="current-password" className="field" name="password" type="password" />
@@ -70,11 +70,11 @@ export function LoginForm({ notice }: { notice?: string }) {
 export function SetupForm({ notice }: { notice?: string }) {
   return (
     <AuthShell>
-      <div className="px-5 py-7">
+      <div className="px-5 py-8 sm:px-8 sm:py-10">
         <VercelBanner />
         <AuthNotice value={notice} />
-        <p className="eyebrow">First-time setup</p>
-        <h1 className="mt-3 font-serif text-3xl font-bold text-[#1c2b3a]">Create your local login.</h1>
+        <p className="eyebrow text-[#806b2e]">First-time setup</p>
+        <h1 className="mt-3 max-w-md font-serif text-2xl font-bold leading-tight text-[#1c2b3a] sm:text-3xl">Create your local login.</h1>
         <p className="mt-4 text-sm leading-6 text-[#4a4a4a]">This password protects the dashboard. It is hashed with Argon2id and is not an Akahu or bank password.</p>
         <form action={setupAccount} className="mt-5 grid gap-3">
           <label className="grid gap-2 text-sm text-[#4a4a4a]">Password<input required autoComplete="new-password" className="field" maxLength={128} minLength={12} name="password" type="password" /></label>
