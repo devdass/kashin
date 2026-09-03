@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   createCategoriesFromWizard,
@@ -76,8 +76,7 @@ export function OnboardingWizard({
   // Step 2: accounts
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>(
     accounts.map((a) => a.id),
-  );
-  // Step 3: categories
+  );  // Step 3: categories
   const [categorySelection, setCategorySelection] = useState<Record<string, { name: string; color: string; selected: boolean }>>(
     Object.fromEntries(SUGGESTED_CATEGORIES.map((c) => [c.id, { name: c.name, color: c.color, selected: c.id === "other" }])),
   );
@@ -94,6 +93,16 @@ export function OnboardingWizard({
   const [aiModel, setAiModel] = useState(llm.model || "");
   const [aiBaseUrl, setAiBaseUrl] = useState(llm.baseUrl || "");
   const [aiKey, setAiKey] = useState("");
+
+  // Default-select all synced accounts for the budget once they arrive (they may
+  // not exist at first mount, before the user syncs). Only fills in if nothing is
+  // selected yet, so it never overrides an explicit choice.
+  useEffect(() => {
+    if (selectedAccounts.length === 0 && accounts.length > 0) {
+      setSelectedAccounts(accounts.map((a) => a.id));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accounts]);
 
   const goTo = (next: number) => {
     setError(null);
@@ -122,14 +131,17 @@ export function OnboardingWizard({
 
   const submitTokens = async (form: FormData) => {
     const ok = await run(() => wizardSaveTokens(form));
-    if (ok) setTokensSaved(true);
+    if (ok) {
+      setTokensSaved(true);
+      goTo(2);
+    }
   };
 
   const submitAccounts = async () => {
     const form = new FormData();
     for (const id of selectedAccounts) form.append("account_id", id);
     const ok = await run(() => saveBudgetAccounts(form));
-    if (ok) goTo(step + 1);
+    if (ok) goTo(3);
   };
 
   const submitCategories = async () => {
@@ -147,7 +159,7 @@ export function OnboardingWizard({
       form.append(`color_custom-${name}`, "#4f8de7");
     }
     await run(() => createCategoriesFromWizard(form));
-    goTo(step + 1);
+    goTo(4);
   };
 
   const finish = async () => {

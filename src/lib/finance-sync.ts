@@ -35,6 +35,9 @@ export async function syncFinanceData(tokens: AkahuTokens): Promise<SyncResult> 
     const now = new Date();
     const start = new Date(now.getTime() - 370 * 24 * 60 * 60 * 1000);
     const categorizer = buildCategorizer();
+    const categoryIds = new Set<string>(
+      (db.prepare("SELECT id FROM categories").all() as Array<{ id: string }>).map((row) => row.id),
+    );
     const transactionSets: Array<{
       account: AkahuAccount;
       transactions: AkahuTransaction[];
@@ -161,6 +164,13 @@ export async function syncFinanceData(tokens: AkahuTokens): Promise<SyncResult> 
         }
         for (const transaction of transactions) {
           const decision = categorizer(transaction);
+          // The categoriser may resolve a hint to a category the user hasn't created
+          // yet (or has since renamed/removed). If so, store the transaction as
+          // uncategorised rather than violating the foreign key.
+          const categoryId = decision.categoryId && categoryIds.has(decision.categoryId)
+            ? decision.categoryId
+            : null;
+          const isUncategorised = categoryId === null;
           upsertTransaction.run(
             transaction.id,
             account.id,
@@ -172,10 +182,10 @@ export async function syncFinanceData(tokens: AkahuTokens): Promise<SyncResult> 
             normalizeVendor(transaction.merchant ?? transaction.description),
             transaction.category ?? null,
             transaction.categoryGroup ?? null,
-            decision.categoryId,
-            decision.source,
-            decision.confidence,
-            decision.reviewed ? 1 : 0,
+            categoryId,
+            isUncategorised ? "UNCATEGORISED" : decision.source,
+            isUncategorised ? 0.25 : decision.confidence,
+            isUncategorised ? 0 : decision.reviewed ? 1 : 0,
             syncedAt,
           );
         }

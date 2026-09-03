@@ -452,11 +452,12 @@ export function getTransactions(options?: {
     .prepare(`
       SELECT t.id, t.account_id accountId, COALESCE(a.nickname, a.name) accountName, t.date,
         t.description, t.amount, t.type, t.merchant, t.category_id categoryId,
-        c.name categoryName, c.color categoryColor, t.category_source source,
+        COALESCE(c.name, 'Uncategorised') categoryName,
+        COALESCE(c.color, '#9a9a93') categoryColor, t.category_source source,
         t.confidence, t.reviewed
       FROM cached_transactions t
       JOIN cached_accounts a ON a.id = t.account_id
-      JOIN categories c ON c.id = t.category_id
+      LEFT JOIN categories c ON c.id = t.category_id
       WHERE ${clauses.join(" AND ")}
       ORDER BY t.date DESC LIMIT ?
     `)
@@ -477,12 +478,12 @@ export function getAccountTransactions(
     .prepare(`
       SELECT t.id, t.account_id accountId, COALESCE(a.nickname, a.name) accountName, t.date,
         t.description, t.amount, t.type, t.merchant,
-        t.category_id categoryId, c.name categoryName,
-        c.color categoryColor, t.category_source source,
+        t.category_id categoryId, COALESCE(c.name, 'Uncategorised') categoryName,
+        COALESCE(c.color, '#9a9a93') categoryColor, t.category_source source,
         t.confidence, t.reviewed
       FROM cached_transactions t
       JOIN cached_accounts a ON a.id = t.account_id
-      JOIN categories c ON c.id = t.category_id
+      LEFT JOIN categories c ON c.id = t.category_id
       WHERE t.account_id = ? AND t.date >= ? AND t.date <= ? AND t.is_hidden = 0
       ORDER BY t.date DESC
     `)
