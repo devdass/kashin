@@ -128,17 +128,17 @@ export function Brochure() {
           <div className="mt-6 grid gap-4 lg:grid-cols-3">
             <figure className="border border-[#c8bea8] bg-[#faf7f0] p-3">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img alt="Kashin dashboard with spending summary and budgets" className="border border-[#c8bea8]" src="/screenshots/dashboard.png" />
+              <img alt="Kashin dashboard with spending summary and budgets" className="h-56 w-full border border-[#c8bea8] object-cover object-top" src="/screenshots/dashboard.png" />
               <figcaption className="mt-3 font-mono text-[9px] uppercase tracking-[0.06em] text-[#9a9a9a]">Dashboard · spend & budgets</figcaption>
             </figure>
             <figure className="border border-[#c8bea8] bg-[#faf7f0] p-3">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img alt="Kashin balanced budget editor" className="border border-[#c8bea8]" src="/screenshots/budget.png" />
+              <img alt="Kashin balanced budget editor" className="h-56 w-full border border-[#c8bea8] object-cover object-top" src="/screenshots/budget.png" />
               <figcaption className="mt-3 font-mono text-[9px] uppercase tracking-[0.06em] text-[#9a9a9a]">Balanced budget</figcaption>
             </figure>
             <figure className="border border-[#c8bea8] bg-[#faf7f0] p-3">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img alt="Kashin transaction review queue" className="border border-[#c8bea8]" src="/screenshots/activity.png" />
+              <img alt="Kashin transaction review queue" className="h-56 w-full border border-[#c8bea8] object-cover object-top" src="/screenshots/activity.png" />
               <figcaption className="mt-3 font-mono text-[9px] uppercase tracking-[0.06em] text-[#9a9a9a]">Review your transactions</figcaption>
             </figure>
           </div>
