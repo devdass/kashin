@@ -33,42 +33,60 @@ database and no account.
 
 ## Quickstart
 
+### Option A — one-command install (recommended)
+
+**macOS / Linux** — paste this in a terminal (or double-click `Kashin.command`):
+
 ```bash
-# 1. Clone and install
+git clone https://github.com/devdass/kashin.git
+cd kashin
+bash install.sh
+```
+
+**Windows** — double-click `install.bat` (or run it from a terminal).
+
+The installer checks for Node.js (and offers to install it), installs dependencies,
+generates your local encryption key, and starts Kashin at
+[http://localhost:3000](http://localhost:3000) — one command, no manual setup.
+
+### Option B — manual
+
+```bash
 git clone https://github.com/devdass/kashin.git
 cd kashin
 npm install
-
-# 2. Create a local encryption key
 cp .env.example .env.local
 openssl rand -base64 32   # paste the output after AKAHU_ENCRYPTION_KEY=
-
-# 3. Run it
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000):
+### First run (guided wizard)
+
+Open [http://localhost:3000](http://localhost:3000) and follow the wizard:
 
 1. Create a local password (12+ characters). It's hashed with Argon2id and is
    *not* an Akahu or bank password.
-2. In **Settings → Bank accounts**, paste your Akahu **User Access Token** and
-   **App ID Token**. They're verified with Akahu and encrypted before being
-   stored.
-3. Hit **Sync local data**. Accounts and up to 370 days of settled transactions
-   are pulled into local SQLite.
-4. In **Settings → Balanced budget accounts**, choose which accounts feed your
-   main budget, then set targets on the **Budget** page.
+2. Paste your Akahu **User Access Token** and **App ID Token** from
+   [my.akahu.nz](https://my.akahu.nz). They're verified with Akahu and encrypted
+   before being stored.
+3. Sync your accounts, then pick which ones feed your balanced budget.
+4. **Build your own categories** — the wizard suggests common ones, and you can
+   rename, remove, or add your own.
+5. Optionally add savings goals, set budget targets, and enable AI categorisation.
+
+That's it — you'll land on your dashboard with your own categories and data.
 
 ## AI categorisation (optional)
 
 Kashin can use a large language model to help label transactions the local
 rules can't resolve. It is **off by default**.
 
-In **Settings → AI categorisation**:
+In the wizard (or **Settings → AI categorisation**):
 
 1. Tick *Enable AI categorisation*.
-2. Choose a provider — **OpenAI**, **Anthropic**, or any **OpenAI-compatible**
-   endpoint (Ollama, OpenRouter, etc.).
+2. Choose a provider — **Surplus Intelligence** (recommended, pre-filled),
+   **OpenAI**, **Anthropic**, or any **OpenAI-compatible** endpoint
+   (Ollama, OpenRouter, etc.).
 3. Enter your own API key and model.
 4. **Test connection**, then run **Categorise now**.
 

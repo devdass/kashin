@@ -30,23 +30,23 @@ const features = [
 const steps = [
   {
     step: "1",
-    title: "Clone & install",
-    code: "git clone https://github.com/devdass/kashin.git\ncd kashin\nnpm install",
+    title: "Install in one command",
+    code: "git clone https://github.com/devdass/kashin.git\ncd kashin\nbash install.sh",
   },
   {
     step: "2",
-    title: "Add a local encryption key",
-    code: "cp .env.example .env.local\nopenssl rand -base64 32  # put the output after AKAHU_ENCRYPTION_KEY=",
+    title: "Open the guided wizard",
+    body: "Browse to http://localhost:3000 and create a local password. The setup wizard walks you through the rest.",
   },
   {
     step: "3",
-    title: "Run it locally",
-    code: "npm run dev",
+    title: "Connect your bank",
+    body: "Paste your Akahu personal-app User Access and App ID tokens. Read-only access, verified and encrypted.",
   },
   {
     step: "4",
-    title: "Create a password & connect Akahu",
-    body: "Open http://localhost:3000, create a login, then paste your Akahu personal-app User Access and App ID tokens. Hit sync and you're off.",
+    title: "Build it your way",
+    body: "Pick your budget accounts, create your own categories and goals, and optionally enable AI. Then start reviewing.",
   },
 ];
 
@@ -123,7 +123,30 @@ export function Brochure() {
         </section>
 
         <section className="mt-20">
-          <p className="eyebrow">Get started in four steps</p>
+          <p className="eyebrow">Take a look</p>
+          <h2 className="mt-2 font-serif text-3xl font-bold text-[#1c2b3a]">Your dashboard, on your machine.</h2>
+          <div className="mt-6 grid gap-4 lg:grid-cols-3">
+            <figure className="border border-[#c8bea8] bg-[#faf7f0] p-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img alt="Kashin dashboard with spending summary and budgets" className="border border-[#c8bea8]" src="/screenshots/dashboard.png" />
+              <figcaption className="mt-3 font-mono text-[9px] uppercase tracking-[0.06em] text-[#9a9a9a]">Dashboard · spend & budgets</figcaption>
+            </figure>
+            <figure className="border border-[#c8bea8] bg-[#faf7f0] p-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img alt="Kashin balanced budget editor" className="border border-[#c8bea8]" src="/screenshots/budget.png" />
+              <figcaption className="mt-3 font-mono text-[9px] uppercase tracking-[0.06em] text-[#9a9a9a]">Balanced budget</figcaption>
+            </figure>
+            <figure className="border border-[#c8bea8] bg-[#faf7f0] p-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img alt="Kashin transaction review queue" className="border border-[#c8bea8]" src="/screenshots/activity.png" />
+              <figcaption className="mt-3 font-mono text-[9px] uppercase tracking-[0.06em] text-[#9a9a9a]">Review your transactions</figcaption>
+            </figure>
+          </div>
+          <p className="mt-3 font-mono text-[9px] uppercase tracking-[0.06em] text-[#9a9a9a]">Illustrative previews with sample data — your dashboard reflects your own accounts.</p>
+        </section>
+
+        <section className="mt-20">
+          <p className="eyebrow">Get started</p>
           <div className="mt-5 grid gap-px border border-[#c8bea8] bg-[#c8bea8] md:grid-cols-2">
             {steps.map((item) => (
               <div className="bg-[#faf7f0] p-6" key={item.step}>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   createCategoriesFromWizard,
@@ -104,16 +104,6 @@ export function OnboardingWizard({
   const [aiBaseUrl, setAiBaseUrl] = useState(llm.baseUrl || "");
   const [aiKey, setAiKey] = useState("");
 
-  // Default-select all synced accounts for the budget once they arrive (they may
-  // not exist at first mount, before the user syncs). Only fills in if nothing is
-  // selected yet, so it never overrides an explicit choice.
-  useEffect(() => {
-    if (selectedAccounts.length === 0 && accounts.length > 0) {
-      setSelectedAccounts(accounts.map((a) => a.id));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accounts]);
-
   const goTo = (next: number) => {
     setError(null);
     setStep(next);
@@ -148,8 +138,11 @@ export function OnboardingWizard({
   };
 
   const submitAccounts = async () => {
+    // Default to all accounts if the user hasn't made an explicit selection (e.g.
+    // accounts arrived after first mount via sync).
+    const ids = selectedAccounts.length > 0 ? selectedAccounts : accounts.map((a) => a.id);
     const form = new FormData();
-    for (const id of selectedAccounts) form.append("account_id", id);
+    for (const id of ids) form.append("account_id", id);
     const ok = await run(() => saveBudgetAccounts(form));
     if (ok) goTo(3);
   };
