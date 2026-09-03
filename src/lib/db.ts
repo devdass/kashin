@@ -279,20 +279,21 @@ const migrations = [
   },
 ];
 
-const applyMigration = db.transaction((version: number, sql: string) => {
-  const applied = db
-    .prepare("SELECT 1 FROM schema_migrations WHERE version = ?")
-    .get(version);
-  if (applied) return;
-  db.exec(sql);
-  db.prepare(
-    "INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)",
-  ).run(version, new Date().toISOString());
-});
+if (!dbUnavailable) {
+  const applyMigration = db.transaction((version: number, sql: string) => {
+    const applied = db
+      .prepare("SELECT 1 FROM schema_migrations WHERE version = ?")
+      .get(version);
+    if (applied) return;
+    db.exec(sql);
+    db.prepare(
+      "INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+    ).run(version, new Date().toISOString());
+  });
 
-for (const migration of migrations) {
-  if (dbUnavailable) break;
-  applyMigration.immediate(migration.version, migration.sql);
+  for (const migration of migrations) {
+    applyMigration.immediate(migration.version, migration.sql);
+  }
 }
 
 if (process.env.NODE_ENV !== "production" && !dbUnavailable) {

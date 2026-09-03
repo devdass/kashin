@@ -5,6 +5,8 @@ import { getBudgetAccountSelection } from "@/lib/finance-data";
 import { isOnboardingComplete } from "@/lib/onboarding";
 import { getLlmSettings } from "@/lib/llm";
 
+export const dynamic = "force-dynamic";
+
 export default async function WelcomePage() {
   if (!hasAccount() || !(await getAuthenticatedUserId())) redirect("/");
   if (isOnboardingComplete()) redirect("/");
